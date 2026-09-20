@@ -1,0 +1,65 @@
+# docker compose for Ymer Node. Runs `ymer-node:latest` and never builds it, so
+# an `up` here never moves that tag — what does move it is written where the
+# tag is moved, in the build task's own documentation.
+#
+# Compose names a project after the compose file's directory, so two copies
+# of this file in directories with the same name share one project: an `up`
+# in one would recreate the other's container against its own ./data, and a
+# `down` in one would delete the other's container. Pin the project name of
+# the install — COMPOSE_PROJECT_NAME in a .env beside it — wherever another
+# directory holding this file shares its name. A second copy run while the
+# install is up — a smoke test in the checkout, say — needs both a project
+# name of its own (-p) and a free port (PORT=): -p alone still collides on
+# the published port, and a free port alone leaves it in this directory's
+# own project, for any later `up` or `down` here to act on.
+services:
+  ymer-node:
+    image: ymer-node:latest
+    environment:
+      # Both databases live under /data/db; the host side is the NODE_DATA_DIR
+      # mount. This names the directory, not a file — notebook.db and node.db
+      # are fixed names inside it.
+      DATABASES_PATH: /data/db
+      # Backups are a sibling of db/, not inside it, so they survive a deploy.
+      BACKUPS_PATH: /data/backups
+      # The files directory: what your scripts read files from and write files
+      # to, reached from a script through the node's own accessor. Yours, not
+      # the node's — put a file here for a script, open what a script wrote,
+      # arrange sub-directories as you like; the node creates it at boot and
+      # never backs it up. Keep it inside the /data mount, or the host will
+      # not see it.
+      FILES_PATH: /data/files
+      # Bind the app inside the container to the same port published below, so
+      # the two always agree even when PORT is set in the shell rather than in
+      # .env. This does NOT widen the bind — the host side is hardcoded to
+      # 127.0.0.1 in `ports:`.
+      PORT: "${PORT:-8012}"
+      # The node's time zone, as an IANA name such as Europe/Helsinki. Set it in
+      # the install's .env, not in this file: a deploy copies this file over the
+      # install's and leaves .env alone. Read from the shell like PORT, so a TZ
+      # exported there reaches the node too. Unset, the node runs in Etc/UTC; a
+      # name the node's zone database does not know refuses boot, and
+      # `docker compose logs` shows TZ and the value.
+      TZ: "${TZ:-}"
+    ports:
+      # Bind the HOST side to loopback only. /mcp is UNAUTHENTICATED, and not
+      # being reachable from the network is that decision's whole compensating
+      # control. Do NOT make this prefix env-driven: overriding PORT must never
+      # be able to widen the bind. Exposing the port beyond loopback requires
+      # adding MCP authentication first.
+      - "127.0.0.1:${PORT:-8012}:${PORT:-8012}"
+    volumes:
+      # notebook.db is the one thing here worth keeping; a bind mount keeps it
+      # easy to back up by hand. Under a VM-backed Docker (macOS) the bind
+      # mount can log transient "database is locked" noise at boot — absorbed
+      # by the configured busy_timeout, but test your storage shape before
+      # trusting it with real data. (A named volume avoids the noise but is
+      # incompatible with the `user:` override below: a fresh volume inherits
+      # /data owned by the image's `nobody`, so a host-UID process cannot
+      # create db/ and the container crash-loops.)
+      - "${NODE_DATA_DIR:-./data}:/data"
+    # Linux hosts: run as the host user so a bind-mounted store stays
+    # host-readable. Under a VM-backed Docker (macOS) the share ignores the
+    # container's ids and every uid writes, so the override changes nothing there.
+    user: "${NODE_UID:-1000}:${NODE_GID:-1000}"
+    restart: unless-stopped

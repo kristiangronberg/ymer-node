@@ -1,0 +1,12 @@
+_build/
+deps/
+doc/
+data/
+.git/
+.gitignore
+.env
+*.db
+*.db-*
+backups_dev/
+.expert/
+**/erl_crash.dump

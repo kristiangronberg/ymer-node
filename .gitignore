@@ -1,0 +1,22 @@
+# Folders
+/_build/
+/cover/
+/deps/
+/doc/
+/tmp/
+
+# Files
+*.env
+/data/
+*.db
+*.db-*
+*.ez
+erl_crash.dump
+CLAUDE.local.md
+
+# The dev files directory: its .gitkeep alone is tracked, so a fresh clone has
+# the directory and what a developer drops in it stays out of git. The test
+# partitions' files directories are never tracked.
+/files_dev/*
+!/files_dev/.gitkeep
+/ymer_node_test*_files/
