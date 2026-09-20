@@ -77,8 +77,8 @@ defmodule YmerNode.Mcp.Tools.Notebook.ActionsTest do
          rather than listed by hand: for each required parameter the table declares
          as a string, a present value holding a number, a boolean, a list, an object
          or `null` is refused with a reason the caller can act on, instead of
-         matching no clause and reaching the MCP framework's top-level rescue as a
-         `tool_raised` FunctionClauseError. Every other required parameter of the
+         matching no clause and reaching the MCP framework's fault containment as a
+         `tool_fault` FunctionClauseError. Every other required parameter of the
          action rides along as a valid string, so an action with two required
          strings still meets its heads. The premise assertion trips first if a
          required parameter stops being a string — such a parameter needs a twin

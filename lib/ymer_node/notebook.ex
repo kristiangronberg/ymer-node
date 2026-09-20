@@ -288,8 +288,8 @@ defmodule YmerNode.Notebook do
   # The retry runs inside a try of its own. This function is reached from
   # `with_notebook/2`'s catch clause, which sits OUTSIDE its own try, so a second
   # failure here would escape as a raw exception or exit rather than the answer
-  # this guard exists to produce — and the MCP framework rescues exceptions, not
-  # exits. It never retries twice: one restart window is one retry.
+  # this guard exists to produce. It never retries twice: one restart window is
+  # one retry.
   defp retry_read(fun) do
     answered(fun.())
   catch
