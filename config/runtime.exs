@@ -191,8 +191,8 @@ if config_env() == :prod do
   #
   # `mix ymer_node.deploy` composes the same string from the version and
   # revision it built and compares it against what the container answers on
-  # `initialize`. That comparison is what keeps this composition and the
-  # task's expectation equal — change one and the verify fails loudly
+  # `server/discover`. That comparison is what keeps this composition and
+  # the task's expectation equal — change one and the verify fails loudly
   # rather than drifting.
   revision = env.("YMER_NODE_REVISION")
   release_version = env.("RELEASE_VSN")

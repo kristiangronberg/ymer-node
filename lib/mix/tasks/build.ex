@@ -112,10 +112,10 @@ if Mix.env() in [:dev, :test] do
     version, `latest`, and the revision — the short sha of the commit the build
     was made from, marked when the tree carried uncommitted changes. That same
     revision rides on the image's OCI revision label and inside the node's own
-    `serverInfo.version`, so `docker images`, the label, and a live `initialize`
-    all name one commit. Where no revision can be named — no `git`, or a
-    directory that is no work tree — the image gets the version tag and `latest`
-    only, carries no label, and answers with the bare version.
+    `serverInfo.version`, so `docker images`, the label, and a live
+    `server/discover` all name one commit. Where no revision can be named — no
+    `git`, or a directory that is no work tree — the image gets the version tag
+    and `latest` only, carries no label, and answers with the bare version.
 
     ## What moves `ymer-node:latest`
 

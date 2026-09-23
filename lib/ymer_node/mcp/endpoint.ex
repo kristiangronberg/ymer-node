@@ -13,7 +13,7 @@ defmodule YmerNode.Mcp.Endpoint do
 
   The catch-all 404 is deliberate rather than incidental: the node serves exactly
   one path, so anything else is a client misconfiguration, and saying so plainly
-  beats handing an MCP session to a caller who asked for something else.
+  beats answering MCP to a caller who asked for something else.
   """
   use Plug.Router
 

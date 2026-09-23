@@ -4,7 +4,7 @@ defmodule YmerNode.MixProject do
   def project do
     [
       app: :ymer_node,
-      version: "0.2.1",
+      version: "0.2.2",
       elixir: "~> 1.19",
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
@@ -73,17 +73,10 @@ defmodule YmerNode.MixProject do
       {:bandit, "~> 1.12.5"},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:ecto_sql, "~> 3.13"},
-      {:ecto_sqlite3, "~> 0.24"},
-      # The XLSX a script writes — a Jira search exported for a colleague to
-      # open. One of the format packages promised to scripts, each for one job
-      # in `YmerNode.Script`'s What a script may call. Pure Elixir, with no
-      # dependencies of its own.
+      {:ecto_sqlite3, "~> 0.25"},
       {:elixlsx, "~> 0.6.0"},
-      # dev AND test: `mix precommit` runs under MIX_ENV=test (see `cli/0`), and
-      # `mix docs` is a task only where ex_doc is a dependency — at `only: :dev`
-      # the gate dies with `The task "docs" could not be found`.
       {:ex_doc, "~> 0.40.4", only: [:dev, :test], runtime: false},
-      {:ex_slop, "~> 0.4", only: [:dev, :test], runtime: false},
+      {:ex_slop, "~> 0.4.5", only: [:dev, :test], runtime: false},
       # HTML a script reads into markdown — a wiki page, a mail body. Pure
       # Elixir, with no dependencies of its own.
       {:floki, "~> 0.38.4"},
@@ -121,18 +114,7 @@ defmodule YmerNode.MixProject do
       # `:xmerl`, which `application/0` names above. Pure Elixir, with no
       # dependencies of its own.
       {:sweet_xml, "~> 0.7.5"},
-      # A PDF a script writes — a report other people read — from Typst markup,
-      # or its pages as PNG or SVG. A NIF: the build downloads its precompiled
-      # artifact for the building machine's target, so no Rust toolchain
-      # reaches the image — and `TYPST_BUILD` is never set for the image
-      # build, since it compiles the NIF from Rust source. Four font families
-      # are inside that library; the 33 files the package ships beside it are
-      # unreachable in a release (their directory is resolved at compile time,
-      # an upstream defect), and every other font is the user's,
-      # installed on the machine the node runs on — so the image carries no font
-      # package, and a font that renders in dev may fall back on the node, which
-      # `YmerNode.Script`'s What a script may call says beneath its table.
-      {:typst, "~> 0.4.2"},
+      {:typst, "~> 0.4.4"},
       # The zone database behind every zone-aware `DateTime` call a script makes,
       # made Elixir's own by one line in `config/config.exs`. The IANA data is
       # compiled into the package, so the node makes no call for zone data:
@@ -148,12 +130,12 @@ defmodule YmerNode.MixProject do
       # No direct :plug dep although `YmerNode.Mcp.Endpoint` uses `Plug.Router`:
       # bandit and wymcp are both built around Plug and pull it in — the
       # transitive requirement is relied on deliberately, not restated here.
-      # Three-segment on purpose: `~> 0.6` would float onto 0.7.0, and pre-1.0
-      # wymcp treats a minor as the breaking bump, so `~> 0.6.0` admits 0.6.x
+      # Three-segment on purpose: `~> 0.8` would float onto 0.9.0, and pre-1.0
+      # wymcp treats a minor as the breaking bump, so `~> 0.8.0` admits 0.8.x
       # only. Plain hex in every environment — a path dep to a sibling checkout
       # would make the build depend on this machine's layout, and the clone
       # gate exists to prove it does not.
-      {:wymcp, "~> 0.7.1"},
+      {:wymcp, "~> 0.8.2"},
       # The XLSX a script reads — a spreadsheet a colleague dropped in the files
       # directory. Pure Elixir; it parses through saxy, and reads numbers as
       # floats unless told otherwise, which `YmerNode.Script`'s What a script

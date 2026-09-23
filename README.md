@@ -73,14 +73,20 @@ claude mcp add --transport http ymer-node http://127.0.0.1:8012/mcp
 ```
 
 For Claude Desktop — and for Cowork, which reads the same file — add it to the
-`mcpServers` object in `claude_desktop_config.json`:
+`mcpServers` object in `claude_desktop_config.json`, bridged through
+[`mcp-remote`](https://www.npmjs.com/package/mcp-remote), which `npx` fetches
+and runs — so the machine needs Node.js, which ships `npx`:
 
 ```json
 "ymer-node": {
-  "type": "http",
-  "url": "http://127.0.0.1:8012/mcp"
+  "command": "npx",
+  "args": ["mcp-remote", "http://127.0.0.1:8012/mcp", "--protocol", "auto"]
 }
 ```
+
+Keep `--protocol auto`. The node speaks only the 2026-07-28 revision of MCP,
+and without the flag `mcp-remote` opens with the earlier revision's handshake,
+which the node refuses — and `mcp-remote` exits on that refusal.
 
 **Set `script_author` to ask before it runs.** Of the tools the node serves, it
 is the one that decides what code this machine will run: storing a script

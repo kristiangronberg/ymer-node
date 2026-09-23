@@ -3,7 +3,9 @@ defmodule Mix.Tasks.YmerNode.DeployTest do
   Covers the task's pure decisions and its refusal of arguments. Nothing here
   shells out, so the file needs no Docker daemon, no `git`, no install and no
   network — the behaviour that does shell out is proved by running the task
-  itself against a real install.
+  itself against a real install. The request the deploy's last check sends is
+  the one case that reaches past a pure function: it goes through the node's
+  MCP mount in-process, with `Plug.Test`, which needs no listener either.
   """
   use ExUnit.Case, async: true
 
@@ -172,6 +174,30 @@ defmodule Mix.Tasks.YmerNode.DeployTest do
 
     test "a JSON-RPC error response is an error" do
       assert Deploy.serverinfo_version(~s({"error":{"code":-32600}})) == :error
+    end
+  end
+
+  describe "discover_request/0" do
+    @tag doc: """
+         Guards the gap a new framework release exposed: the probe went on
+         sending the previous protocol revision's handshake while every other
+         test stayed green, so only a live deploy could have shown that the
+         node refuses it. A failure means the probe and the node's mount
+         disagree — read the error body in the failure before changing either
+         side.
+         """
+    test "the node's mount answers the probe with its configured version" do
+      {headers, body} = Deploy.discover_request()
+
+      response =
+        :post
+        |> Plug.Test.conn("/", body)
+        |> Plug.Conn.merge_req_headers(headers)
+        |> YmerNode.Mcp.call(YmerNode.Mcp.init([]))
+
+      assert Deploy.serverinfo_version(response.resp_body) ==
+               {:ok, Application.fetch_env!(:wymcp, :version)},
+             response.resp_body
     end
   end
 

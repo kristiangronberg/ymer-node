@@ -36,7 +36,7 @@ if Mix.env() in [:dev, :test] do
         Task->>Task: copy docker-compose.yml into the install
         Task->>Compose: up -d
         Task->>Docker: container image id
-        Task->>Node: initialize
+        Task->>Node: server/discover
         Node-->>Task: serverInfo.version
     ```
 
@@ -122,22 +122,22 @@ if Mix.env() in [:dev, :test] do
     Two checks, in order. The container's image id — `{{.Image}}`, the id, not
     the reference it was created from — must equal the id `ymer-node:latest`
     now names; a reference compare would read the same for a container that
-    never moved. Then `initialize` on the port Docker reports published must
-    answer a `serverInfo.version` equal to the version and revision just built.
-    The port comes from `docker port` rather than from any assumption here, and
-    a container found `restarting`, `exited` or `dead` fails fast with its
-    state and restart count rather than waiting out the budget.
+    never moved. Then a `server/discover` on the port Docker reports published
+    must answer a `serverInfo.version` equal to the version and revision just
+    built. The port comes from `docker port` rather than from any assumption
+    here, and a container found `restarting`, `exited` or `dead` fails fast
+    with its state and restart count rather than waiting out the budget.
 
-    The node's supervision tree brings its HTTP listener up last, so an
-    `initialize` that answers is also proof that the store opened and the
+    The node's supervision tree brings its HTTP listener up last, so a
+    `server/discover` that answers is also proof that the store opened and the
     vector extension loaded.
 
     ## What a deploy does not touch
 
-    The store: `data/` is a bind mount the recreate keeps, and `initialize` is
-    a read. The install's `.env` — install-specific state, and theirs. And the
-    version in `mix.exs`, which is a release number, not a build's identity;
-    the revision is what names the code.
+    The store: `data/` is a bind mount the recreate keeps, and
+    `server/discover` is a read. The install's `.env` — install-specific
+    state, and theirs. And the version in `mix.exs`, which is a release
+    number, not a build's identity; the revision is what names the code.
 
     The module is wrapped in `if Mix.env() in [:dev, :test]`, which keeps it
     callable under the default `:dev` and out of the prod release.
@@ -154,7 +154,8 @@ if Mix.env() in [:dev, :test] do
     @shadowing_compose_files ~w(compose.yaml compose.yml)
     @install_dir_env "YMER_NODE_INSTALL_DIR"
     @default_install_dir "~/Apps/ymer-node"
-    @protocol_version "2025-11-25"
+    @protocol_version "2026-07-28"
+    @serverinfo_field "io.modelcontextprotocol/serverInfo"
 
     # The node boots in seconds — the listener is its last child, and the only
     # work in front of it is the node database's migrator, which runs the
@@ -528,7 +529,7 @@ if Mix.env() in [:dev, :test] do
 
     @doc """
     The version string a container built from this version and revision answers
-    on `initialize` — semver build metadata, composed the same way
+    on `server/discover` — semver build metadata, composed the same way
     `config/runtime.exs` composes it inside the release. A build with no
     revision answers the bare version.
 
@@ -568,12 +569,13 @@ if Mix.env() in [:dev, :test] do
     end
 
     @doc """
-    The `serverInfo.version` in an `initialize` response body. The node answers
-    `initialize` as plain JSON, so nothing here unwraps an event stream.
+    The `serverInfo.version` in a `server/discover` response body, where it
+    rides in the result's `_meta` under `io.modelcontextprotocol/serverInfo`.
+    The node answers as plain JSON, so nothing here unwraps an event stream.
 
     ## Examples
 
-        iex> body = ~s({"result":{"serverInfo":{"name":"n","version":"1.2.3+b2a7152"}}})
+        iex> body = ~s({"result":{"_meta":{"io.modelcontextprotocol/serverInfo":{"version":"1.2.3+b2a7152"}}}})
         iex> Mix.Tasks.YmerNode.Deploy.serverinfo_version(body)
         {:ok, "1.2.3+b2a7152"}
 
@@ -583,11 +585,69 @@ if Mix.env() in [:dev, :test] do
     """
     def serverinfo_version(body) when is_binary(body) do
       with {:ok, decoded} <- JSON.decode(body),
-           %{"result" => %{"serverInfo" => %{"version" => version}}} <- decoded do
+           %{"result" => %{"_meta" => %{@serverinfo_field => %{"version" => version}}}} <-
+             decoded do
         {:ok, version}
       else
         _unreadable -> :error
       end
+    end
+
+    @doc """
+    The request the deploy's last check sends, as the headers and body `curl`
+    posts: a `server/discover`, which touches no tool and no store. The
+    protocol fields ride in `params._meta`, and the two headers that mirror
+    the body — `MCP-Protocol-Version` and `Mcp-Method` — go with it, because
+    the node refuses a request whose mirrored headers are missing or disagree
+    with the body. Public so a test can send these exact bytes through the
+    node's mount.
+
+    ## Examples
+
+        iex> {headers, body} = Mix.Tasks.YmerNode.Deploy.discover_request()
+        iex> headers
+        [
+          {"content-type", "application/json"},
+          {"accept", "application/json, text/event-stream"},
+          {"mcp-protocol-version", "2026-07-28"},
+          {"mcp-method", "server/discover"}
+        ]
+        iex> JSON.decode!(body)
+        %{
+          "id" => 1,
+          "jsonrpc" => "2.0",
+          "method" => "server/discover",
+          "params" => %{
+            "_meta" => %{
+              "io.modelcontextprotocol/clientCapabilities" => %{},
+              "io.modelcontextprotocol/protocolVersion" => "2026-07-28"
+            }
+          }
+        }
+
+    """
+    def discover_request do
+      body =
+        JSON.encode!(%{
+          "jsonrpc" => "2.0",
+          "id" => 1,
+          "method" => "server/discover",
+          "params" => %{
+            "_meta" => %{
+              "io.modelcontextprotocol/protocolVersion" => @protocol_version,
+              "io.modelcontextprotocol/clientCapabilities" => %{}
+            }
+          }
+        })
+
+      headers = [
+        {"content-type", "application/json"},
+        {"accept", "application/json, text/event-stream"},
+        {"mcp-protocol-version", @protocol_version},
+        {"mcp-method", "server/discover"}
+      ]
+
+      {headers, body}
     end
 
     @doc """
@@ -924,20 +984,12 @@ if Mix.env() in [:dev, :test] do
     defp describe_answer(:error), do: "nothing readable"
 
     defp answered_version(port) do
-      args = [
-        "-s",
-        "-X",
-        "POST",
-        "-H",
-        "content-type: application/json",
-        "-H",
-        "accept: application/json, text/event-stream",
-        "--max-time",
-        "5",
-        "-d",
-        initialize_body(),
-        "http://127.0.0.1:#{port}/mcp"
-      ]
+      {headers, body} = discover_request()
+      header_args = Enum.flat_map(headers, fn {name, value} -> ["-H", "#{name}: #{value}"] end)
+
+      args =
+        ["-s", "-X", "POST"] ++
+          header_args ++ ["--max-time", "5", "-d", body, "http://127.0.0.1:#{port}/mcp"]
 
       # stdout only: the body is decoded as JSON, and a merged curl notice
       # ahead of it would make every probe unreadable on a node that answers.
@@ -945,19 +997,6 @@ if Mix.env() in [:dev, :test] do
         {output, 0} -> serverinfo_version(output)
         {_output, _status} -> :error
       end
-    end
-
-    defp initialize_body do
-      JSON.encode!(%{
-        "jsonrpc" => "2.0",
-        "id" => 1,
-        "method" => "initialize",
-        "params" => %{
-          "protocolVersion" => @protocol_version,
-          "capabilities" => %{},
-          "clientInfo" => %{"name" => "mix ymer_node.deploy", "version" => "1"}
-        }
-      })
     end
 
     # stdout only, both readers: the ids are compared for identity, and a read
@@ -1024,8 +1063,7 @@ if Mix.env() in [:dev, :test] do
       Mix.shell().info("  Compose file #{compose_state} in #{install}.")
       Mix.shell().info("  " <> rollback_line(rollback))
       Mix.shell().info("  The node answers #{wire} at http://127.0.0.1:#{port}/mcp.")
-      Mix.shell().info("  MCP sessions opened against the previous container are gone;")
-      Mix.shell().info("  reconnect your client before its next call.")
+      Mix.shell().info("  Connected clients keep working; reconnect one to see changed tools.")
     end
   end
 end
