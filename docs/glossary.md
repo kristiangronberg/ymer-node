@@ -232,6 +232,12 @@ no git, or no work tree — carries it nowhere and answers the bare version.
 
 _Avoid_: stamp, sha stamp, build id
 
+### run tree
+`YmerNode.Script.Harness.run_tree/0`
+_Avoid_: throttle tree (it holds more than throttles), node processes,
+script-run process subset; *registry* unqualified — a process registry stays
+compound-qualified
+
 ## S
 
 ### safety backup

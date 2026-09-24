@@ -63,16 +63,29 @@ defmodule YmerNode.Secrets do
   Absolute path of the secrets file (`config :ymer_node, YmerNode.Secrets,
   :path`).
 
-  `Keyword.fetch!` and not a default: every environment sets it —
-  `config/prod.exs` carries `/data/secrets.env`, `config/runtime.exs` overrides
-  it from `SECRETS_PATH`, dev and test point at the checkout root — and a node
-  that cannot say where its secrets live must fail loudly rather than invent a
-  path and write a file there.
+  Refused by name, never defaulted: the release sets it — `config/prod.exs`
+  carries `/data/secrets.env`, `config/runtime.exs` overrides it from
+  `SECRETS_PATH` — and dev and test point at the checkout root, so a node that
+  cannot say where its secrets live fails loudly rather than inventing a path
+  and writing a file there. A VM that runs script code outside the node has
+  none of those environments, and points the key with
+  `YmerNode.Script.Harness.put_secrets_path/1`.
   """
   def path do
     :ymer_node
     |> Application.get_env(__MODULE__, [])
-    |> Keyword.fetch!(:path)
+    |> Keyword.fetch(:path)
+    |> case do
+      {:ok, path} ->
+        path
+
+      :error ->
+        raise ArgumentError,
+              "no secrets file is configured: `config :ymer_node, YmerNode.Secrets, path:` " <>
+                "is unset — the release sets it and SECRETS_PATH moves it, dev and test " <>
+                "each name their own, and a VM running scripts outside the node points it " <>
+                "with YmerNode.Script.Harness.put_secrets_path/1"
+    end
   end
 
   # ─── Public API ─────────────────────────────────────────────────────

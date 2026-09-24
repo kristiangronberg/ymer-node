@@ -8,8 +8,10 @@ defmodule YmerNode.ScriptContextTest do
   **Not async**, and neither the database nor the network is the reason: the
   secret cases point `YmerNode.Secrets` at a file of their own by setting
   `config :ymer_node, YmerNode.Secrets, :path`, which is VM-global application
-  config that `YmerNode.SecretsTest` sets too. Its `@moduledoc` carries the
-  measurement of what the race looks like when both run async.
+  config that `YmerNode.SecretsTest`, `YmerNode.ScriptHarnessTest` and
+  `YmerNode.ScriptTestSupportTest` set too. `YmerNode.SecretsTest`'s
+  `@moduledoc` carries the measurement of what the race looks like when two of
+  them run async.
 
   The zone cases set VM-global config too — `time_zone` under
   `YmerNode.Script.Context`: the configured case merges it into the keyword
@@ -199,13 +201,23 @@ defmodule YmerNode.ScriptContextTest do
       assert Context.files_dir(context()) == "/data/files"
     end
 
+    test "names the harness setter a VM outside the node points the key with", %{config: config} do
+      Application.put_env(:ymer_node, Context, Keyword.delete(config, :files_dir))
+
+      error = assert_raise ArgumentError, fn -> Context.files_dir(context()) end
+
+      assert error.message =~ "YmerNode.Script.Harness.put_files_dir/1"
+    end
+
     @tag doc: """
-         Every environment sets the key — `config/runtime.exs` from `FILES_PATH`,
-         `config/dev.exs` and `config/test.exs` with a directory of their own —
-         so an absent key is a configuration defect, and the reader refuses it by
-         name rather than inventing a default a script would then write into. A
-         failure means a default came back, and a misconfigured node would
-         quietly read and write files somewhere nobody arranged.
+         The node's own environments set the key — `config/runtime.exs` from
+         `FILES_PATH`, `config/dev.exs` and `config/test.exs` with a directory of
+         their own — and a VM running scripts outside the node points it with
+         `YmerNode.Script.Harness.put_files_dir/1`. So an absent key is a
+         configuration defect, and the reader refuses it by name rather than
+         inventing a default a script would then write into. A failure means a
+         default came back, and a misconfigured node would quietly read and write
+         files somewhere nobody arranged.
          """
     test "refuses an absent key naming it, never a default", %{config: config} do
       Application.put_env(:ymer_node, Context, Keyword.delete(config, :files_dir))

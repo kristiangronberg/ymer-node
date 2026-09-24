@@ -172,6 +172,16 @@ defmodule YmerNode do
   where importing a file from a repository and setting a secret that must never
   pass through a model's context both belong.
 
+  `YmerNode.Script.Harness` and `YmerNode.Script.Test` are for a script
+  developed outside the node, in a repository that takes `ymer_node` under
+  `runtime: false` and so never starts its application. The harness is the
+  runtime-safe half — the run tree, `YmerNode.Script.Harness.run_tree/0`, and
+  setters for the three keys such a VM needs — and `YmerNode.Script.Test` the
+  ExUnit layer over it. Neither is rendered into `scripts guide`: they arrange
+  a VM around a script, and a script is handed none of their setters. The
+  guide names one of them only where `YmerNode.Script.Context.files_dir/1`
+  refuses an unset directory, as the fix for a VM outside the node.
+
   ## The MCP surface
 
   `YmerNode.Mcp` is the mount: the node's entire external surface, and the one

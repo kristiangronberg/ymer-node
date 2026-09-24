@@ -6,8 +6,9 @@ defmodule YmerNode.SecretsTest do
 
   **Not async, and the tmp_dir is not why.** Each case owns its file, but the
   *pointer* to it — `config :ymer_node, YmerNode.Secrets, :path` — is VM-global
-  application config, and `YmerNode.ScriptContextTest` sets the same key for the
-  same reason. Two async modules would then race: one module's `set/2` would
+  application config, and `YmerNode.ScriptContextTest`,
+  `YmerNode.ScriptHarnessTest` and `YmerNode.ScriptTestSupportTest` set the same
+  key. Two async modules would then race: one module's `set/2` would
   read the other's path, and a case that deliberately chmods its file `0644` to
   prove the permissive refusal would hand that refusal to whichever case was
   mid-write. Observed exactly that way at authoring — `set/2` answered
@@ -38,6 +39,25 @@ defmodule YmerNode.SecretsTest do
   defp write!(path, contents) do
     File.write!(path, contents)
     File.chmod!(path, 0o600)
+  end
+
+  describe "path/0" do
+    @tag doc: """
+         A VM running script code outside the node has none of the node's
+         environments to set the key, so this refusal is where its author
+         learns which call points it. A failure means the lookup started
+         inventing a path — a VM missing the key would then write secrets
+         somewhere nobody arranged — or the message stopped naming the setter.
+         """
+    test "refuses an unset path by name, naming the harness setter" do
+      Application.delete_env(:ymer_node, Secrets)
+
+      error = assert_raise ArgumentError, fn -> Secrets.path() end
+
+      assert error.message =~ "path:"
+      assert error.message =~ "SECRETS_PATH"
+      assert error.message =~ "YmerNode.Script.Harness.put_secrets_path/1"
+    end
   end
 
   describe "get/1" do

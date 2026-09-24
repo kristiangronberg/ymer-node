@@ -73,9 +73,10 @@ config :logger, level: :warning
 # Partitioned like the databases. `set/2` rewrites the file whole, so two
 # partitions sharing one path would race. Every case that touches secrets also
 # points the module at a tmp file of its own — but that is not enough to make
-# the module async, because the pointer is this VM-global key: both
-# `YmerNode.SecretsTest` and `YmerNode.ScriptContextTest` set it, so both are
-# `async: false` and say so in their own moduledocs.
+# the module async, because the pointer is this VM-global key:
+# `YmerNode.SecretsTest`, `YmerNode.ScriptContextTest`,
+# `YmerNode.ScriptHarnessTest` and `YmerNode.ScriptTestSupportTest` each set it,
+# so each is `async: false` and says so in its own moduledoc.
 config :ymer_node, YmerNode.Secrets,
   path:
     Path.expand("../ymer_node_secrets_test#{System.get_env("MIX_TEST_PARTITION")}.env", __DIR__)

@@ -183,6 +183,12 @@ what it creates, the node runs. What a script can reach beyond that contract
 and the test that decides when the node itself grows are mapped in
 [Scripts — batteries and their boundary](docs/scripts.md).
 
+A script can also be developed in a repository of its own, with tests of its
+own and a live run against the real systems: take `ymer_node` as a dependency
+under `runtime: false` — its code without its application — and read the
+`YmerNode.Script.Test` page of the docs for testing a script, and the
+`YmerNode.Script.Harness` page for a live run.
+
 A secret a script declares is set on this machine, by you, under the name the
 script declares — never through the session: the `secrets set` line under
 *Running it*, with that name.
@@ -229,6 +235,11 @@ mise exec -- mix precommit
 
 `precommit` is the gate: compile with warnings as errors, format, Credo, a
 dependency audit, and the test suite.
+
+`mix ymer_node.consumer_check` runs apart from it: it builds a project that
+depends on this checkout under `runtime: false` and runs that project's tests,
+which is how the published script test support is proved where the node's
+application does not run.
 
 A fresh clone with no sibling checkouts must build and pass that gate on its own.
 That is a standing requirement rather than a happy accident — if you find yourself

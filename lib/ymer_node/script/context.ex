@@ -201,9 +201,10 @@ defmodule YmerNode.Script.Context do
   script's to make (`File.mkdir_p!/1`) and the user's to arrange. The value is
   `config :ymer_node, YmerNode.Script.Context, :files_dir` — `config/runtime.exs`
   writes it from `FILES_PATH` in the prod environment, `config/dev.exs` and
-  `config/test.exs` name a directory of their own — so every environment sets
-  it, and an absent key is a configuration defect this refuses by name rather
-  than a case to default.
+  `config/test.exs` name a directory of their own — and an absent key is a
+  configuration defect this refuses by name rather than a case to default. A VM
+  that runs script code outside the node has none of those environments, and
+  points the key with `YmerNode.Script.Harness.put_files_dir/1`.
   """
   def files_dir(%__MODULE__{}) do
     :ymer_node
@@ -217,7 +218,9 @@ defmodule YmerNode.Script.Context do
         raise ArgumentError,
               "no files directory is configured: `config :ymer_node, " <>
                 "YmerNode.Script.Context, files_dir:` is unset — the release writes " <>
-                "it from FILES_PATH, dev and test each name their own"
+                "it from FILES_PATH, dev and test each name their own, and a VM running " <>
+                "scripts outside the node points it with " <>
+                "YmerNode.Script.Harness.put_files_dir/1"
     end
   end
 

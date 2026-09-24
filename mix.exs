@@ -4,7 +4,7 @@ defmodule YmerNode.MixProject do
   def project do
     [
       app: :ymer_node,
-      version: "0.2.2",
+      version: "0.2.3",
       elixir: "~> 1.19",
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
@@ -110,9 +110,6 @@ defmodule YmerNode.MixProject do
       # regardless as xlsx_reader's parser; named here because writing XML is a
       # job the node promises it for.
       {:saxy, "~> 1.6"},
-      # XML a script reads — an RSS feed, a SOAP answer — as XPath over OTP's
-      # `:xmerl`, which `application/0` names above. Pure Elixir, with no
-      # dependencies of its own.
       {:sweet_xml, "~> 0.7.5"},
       {:typst, "~> 0.4.4"},
       # The zone database behind every zone-aware `DateTime` call a script makes,
@@ -127,19 +124,7 @@ defmodule YmerNode.MixProject do
       # `:iana_version` — and move the Dockerfile's `COPY priv` above its
       # `mix deps.compile`, which today runs first.
       {:tz, "~> 0.28.2"},
-      # No direct :plug dep although `YmerNode.Mcp.Endpoint` uses `Plug.Router`:
-      # bandit and wymcp are both built around Plug and pull it in — the
-      # transitive requirement is relied on deliberately, not restated here.
-      # Three-segment on purpose: `~> 0.8` would float onto 0.9.0, and pre-1.0
-      # wymcp treats a minor as the breaking bump, so `~> 0.8.0` admits 0.8.x
-      # only. Plain hex in every environment — a path dep to a sibling checkout
-      # would make the build depend on this machine's layout, and the clone
-      # gate exists to prove it does not.
-      {:wymcp, "~> 0.8.2"},
-      # The XLSX a script reads — a spreadsheet a colleague dropped in the files
-      # directory. Pure Elixir; it parses through saxy, and reads numbers as
-      # floats unless told otherwise, which `YmerNode.Script`'s What a script
-      # may call says beneath its table.
+      {:wymcp, "~> 0.8.3"},
       {:xlsx_reader, "~> 0.8.12"}
     ]
   end

@@ -28,9 +28,13 @@ defmodule YmerNode.Application do
   # the loader: a throttle is started by the first request that names it, and
   # only a run of a loaded script makes a request.
   #
-  # Public, and `@doc false`, ONLY so the order above is testable: it is a rule
-  # about a list, and reading the list back is the one way to gate it.
-  # `YmerNode.ApplicationTest` is the reader.
+  # Public, and `@doc false`, ONLY so a test can read the list back — it is the
+  # one way to gate a rule about a list. Two tests do: `YmerNode.ApplicationTest`
+  # gates the order above, and `YmerNode.ScriptHarnessTest` pins
+  # `YmerNode.Script.Harness.run_tree/0` as a transcription of the children a
+  # script's run needs — the task supervisor and the throttles' process registry
+  # and supervisor. A new child a script's run needs goes into `run_tree/0` too:
+  # that test catches an edit to those children, never an addition beside them.
   @doc false
   def children do
     [
