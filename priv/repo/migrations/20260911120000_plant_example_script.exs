@@ -7,18 +7,18 @@ defmodule YmerNode.Repo.Migrations.PlantExampleScript do
 
   # The example script the image ships is planted here, once, as an accepted
   # row of origin `shipped` — so a fresh install holds it without an operator
-  # pushing it by hand. A migration rather than a check at every boot because
+  # importing it by hand. A migration rather than a check at every boot because
   # this table's own record is the memory: a recorded migration never runs
   # again, so removing the row sticks, an upgrade never re-plants it, and a
   # rebuilt node database plants it again with everything else it recreates. A
-  # row of the example's name already here — an operator's own push — is kept
+  # row of the example's name already here — an operator's import — is kept
   # as it is, and so is an operator's script that already claims the example's
   # host: the example is then not planted, the boot goes on, and the log says
   # why — the way the loader goes on past a row that will not compile, because
   # a boot that died over one script would take the notebook and the registry
   # with it, on every boot until someone found the row. The record is written
   # either way, so that install never gets the example from a boot: an operator
-  # who frees the host and wants it pushes the release's own copy by hand
+  # who frees the host and wants it imports the release's own copy by hand
   # (`priv/scripts/hex.exs` under the release's `lib/ymer_node-<version>/`).
   # What the row holds, and why its compile runs outside the loader, is
   # `YmerNode.Scripts.plant_example/0`'s.
@@ -39,7 +39,7 @@ defmodule YmerNode.Repo.Migrations.PlantExampleScript do
         {:error, {:host_claimed, detail}} ->
           Logger.warning(
             "scripts: the example script was not planted, and no later boot will plant it — " <>
-              "#{detail}; once the host is free, push the release's own copy by hand: " <>
+              "#{detail}; once the host is free, import the release's own copy by hand: " <>
               "#{YmerNode.Scripts.example_path()}"
           )
 

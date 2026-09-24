@@ -55,7 +55,9 @@ defmodule YmerNode.Repo.Migrations.PlantExampleScriptTest do
     on_exit(fn ->
       Ecto.Migrator.down(Repo, @version, PlantExampleScript, log: false)
       Application.put_env(:ymer_node, Scripts, config)
-      Ecto.Migrator.up(Repo, @version, PlantExampleScript, log: false)
+      # With a later migration recorded, the migrator warns that an older one
+      # is running; here that is the arrangement, not a hazard.
+      capture_log(fn -> Ecto.Migrator.up(Repo, @version, PlantExampleScript, log: false) end)
       Compiler.purge(Module.concat(["Script", "Hex"]))
       Sandbox.mode(Repo, :manual)
     end)

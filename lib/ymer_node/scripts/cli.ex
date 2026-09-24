@@ -4,7 +4,7 @@ defmodule YmerNode.Scripts.CLI do
   human door, beside the client's approval.
 
   A worker reaches scripts through MCP. A person reaches them through here, and
-  the two doors exist for different reasons: pushing a file from a repository,
+  the two doors exist for different reasons: importing a file from a repository,
   setting a secret whose value must never travel through a model's context,
   resetting a throttle's breaker, which no session may reset, and looking at
   what a node holds when no client is connected are all things the wire is the
@@ -30,17 +30,17 @@ defmodule YmerNode.Scripts.CLI do
   close a quote or inject an expression, which a naive interpolation would
   allow for any argument carrying a double quote or an interpolation marker.
 
-  ## Where a pushed file is read
+  ## Where an imported file is read
 
-  `scripts push` with no argument reads the file from **stdin** — the rpc'd
+  `scripts import` with no argument reads the file from **stdin** — the rpc'd
   process inherits the caller's group leader, so `docker exec -i <container>
-  ymer-node scripts push < file` crosses the container boundary with no path
-  inside it. `scripts push <file>` reads a path on the node's own filesystem
+  ymer-node scripts import < file` crosses the container boundary with no path
+  inside it. `scripts import <file>` reads a path on the node's own filesystem
   instead, which is where the shipped example lives; a host path given there is
   refused with status 2, because the node cannot see it.
 
   Nothing on stdin — `docker exec` without `-i` — is a usage error, status 2,
-  for `push` and for `secrets set` alike. What arrives then is an empty string,
+  for `import` and for `secrets set` alike. What arrives then is an empty string,
   which would otherwise be compiled as an empty script and refused with a
   diagnostic about code that never came, or stored as an empty secret that a
   run then presents to the remote as a credential.
@@ -60,12 +60,13 @@ defmodule YmerNode.Scripts.CLI do
 
   One verb prints bytes rather than a line: `scripts export <name>` writes the
   code the node holds and nothing else — not even the newline every other
-  answer ends with — so `> file` holds exactly those bytes and a `scripts push`
-  of that file on another node lands the same hash. Its refusal is a line like
-  any other. The release pins the logger level at `:info` (`config/prod.exs`)
-  so no query log rides that stdout: unpinned, a release logs at `:debug`, and
-  Ecto's query lines then print into the operator's terminal beside the answer
-  — a push's INSERT carrying the whole script.
+  answer ends with — so `> file` holds exactly those bytes and a
+  `scripts import` of that file on another node lands the same hash. Its
+  refusal is a line like any other. The release pins the logger level at
+  `:info` (`config/prod.exs`) so no query log rides that stdout: unpinned, a
+  release logs at `:debug`, and Ecto's query lines then print into the
+  operator's terminal beside the answer — an import's INSERT carrying the
+  whole script.
 
   ## Testing shape
 
@@ -129,8 +130,17 @@ defmodule YmerNode.Scripts.CLI do
   def run(["scripts", "describe", name], _stdin), do: describe(name, false)
   def run(["scripts", "describe", name, "--code"], _stdin), do: describe(name, true)
   def run(["scripts", "export", name], _stdin), do: export(name)
-  def run(["scripts", "push"], stdin), do: from_stdin(stdin, "the script", &push_code/1)
-  def run(["scripts", "push", path], _stdin), do: push(path)
+  def run(["scripts", "import"], stdin), do: from_stdin(stdin, "the script", &import_code/1)
+  def run(["scripts", "import", path], _stdin), do: import_file(path)
+
+  # Remediation(permanent): `push` was this verb's name before it became
+  # `import`, and programs written against the old name call it still. These
+  # two clauses answer exactly as `import` does — the same statuses, the same
+  # line, the same origin — and `usage/0` names only `import`.
+  # plan: 2026-09-23-scripts-program-door
+  def run(["scripts", "push"], stdin), do: run(["scripts", "import"], stdin)
+  def run(["scripts", "push", path], stdin), do: run(["scripts", "import", path], stdin)
+
   def run(["scripts", "accept", name], _stdin), do: accept(name)
   def run(["scripts", "remove", name], _stdin), do: remove(name)
   def run(["scripts", "run", name, action], _stdin), do: run_action(name, action, "{}")
@@ -154,7 +164,7 @@ defmodule YmerNode.Scripts.CLI do
 
   defp scripts_list do
     case Scripts.list() do
-      [] -> {"No scripts. Push one with: ymer-node scripts push <file>", 0}
+      [] -> {"No scripts. Import one with: ymer-node scripts import < file", 0}
       scripts -> {Enum.map_join(scripts, "\n", &list_line/1), 0}
     end
   end
@@ -218,12 +228,13 @@ defmodule YmerNode.Scripts.CLI do
   end
 
   # Both doors land here; where each reads the file is the moduledoc's § Where
-  # a pushed file is read.
-  defp push_code(code), do: written(Scripts.push(code), "Pushed")
+  # an imported file is read. Not `import/1`: that name, called unqualified,
+  # is `Kernel.SpecialForms.import/2`.
+  defp import_code(code), do: written(Scripts.import(code), "Imported")
 
-  defp push(path) do
+  defp import_file(path) do
     case File.read(path) do
-      {:ok, code} -> push_code(code)
+      {:ok, code} -> import_code(code)
       {:error, posix} -> {"Cannot read #{path}: #{:file.format_error(posix)}", 2}
     end
   end
@@ -290,9 +301,9 @@ defmodule YmerNode.Scripts.CLI do
     end
   end
 
-  # Empty stdin is a usage error and never a value (moduledoc § Where a pushed
-  # file is read): the one operator slip that produces it is `docker exec`
-  # without `-i`, so the message names that.
+  # Empty stdin is a usage error and never a value (moduledoc § Where an
+  # imported file is read): the one operator slip that produces it is
+  # `docker exec` without `-i`, so the message names that.
   defp from_stdin(stdin, what, verb) do
     case stdin.() do
       "" ->
@@ -364,8 +375,8 @@ defmodule YmerNode.Scripts.CLI do
       scripts list
       scripts describe <name> [--code]
       scripts export <name>       the code, exactly as the node holds it
-      scripts push                the file on stdin
-      scripts push <file>         a path on the node's own filesystem
+      scripts import              the file on stdin
+      scripts import <file>       a path on the node's own filesystem
       scripts accept <name>
       scripts remove <name>
       scripts run <name> <action> [json-args]

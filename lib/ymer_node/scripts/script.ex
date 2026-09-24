@@ -46,15 +46,15 @@ defmodule YmerNode.Scripts.Script do
   import Ecto.Changeset
   import Ecto.Query, only: [from: 2]
 
-  @origins ~w(authored pushed synced shipped)
+  @origins ~w(authored imported synced shipped)
 
   @cast_fields ~w(name code code_hash accepted_hash accepted_at origin contract
                   description declarations)a
 
   @typedoc """
-  Which door a script row arrived through — `authored` (an MCP write), `pushed`
-  (the CLI), `synced` (registry sync, later), `shipped` (the build: the example
-  script, planted on a fresh node database by a migration).
+  Which door a script row arrived through — `authored` (an MCP write),
+  `imported` (the CLI), `synced` (registry sync, later), `shipped` (the build:
+  the example script, planted on a fresh node database by a migration).
 
   Provenance, never permission: what a row may do is decided by `accepted?/1`,
   and this only records how it got here. It is a plain string rather than an

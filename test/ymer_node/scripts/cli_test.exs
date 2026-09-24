@@ -74,11 +74,11 @@ defmodule YmerNode.Scripts.CLITest do
     test "says so when there is nothing, and how to change that" do
       assert {output, 0} = CLI.run(["scripts", "list"])
       assert output =~ "No scripts"
-      assert output =~ "scripts push"
+      assert output =~ "scripts import"
     end
 
     test "marks each script's state and names its actions" do
-      push!(segment())
+      import!(segment())
 
       assert {output, 0} = CLI.run(["scripts", "list"])
       assert output =~ "ok    "
@@ -92,7 +92,7 @@ defmodule YmerNode.Scripts.CLITest do
          make visible.
          """
     test "marks an unaccepted script rather than hiding it" do
-      script = push!(segment())
+      script = import!(segment())
 
       script
       |> Script.changeset(%{accepted_hash: "stale"})
@@ -106,7 +106,7 @@ defmodule YmerNode.Scripts.CLITest do
 
   describe "scripts describe" do
     test "renders the write mark, the required arguments and the declarations" do
-      script = push!(segment())
+      script = import!(segment())
 
       assert {output, 0} = CLI.run(["scripts", "describe", script.name])
       assert output =~ "read  fetch(url)"
@@ -116,7 +116,7 @@ defmodule YmerNode.Scripts.CLITest do
     end
 
     test "carries the code only when it is asked for" do
-      script = push!(segment())
+      script = import!(segment())
 
       assert {output, 0} = CLI.run(["scripts", "describe", script.name, "--code"])
       assert output =~ "defmodule Script."
@@ -131,27 +131,27 @@ defmodule YmerNode.Scripts.CLITest do
   describe "scripts export" do
     test "answers exactly the code the node holds" do
       segment = segment()
-      script = push!(segment)
+      script = import!(segment)
 
       assert {code, 0} = CLI.run(["scripts", "export", script.name])
       assert code == code(segment)
     end
 
     @tag doc: """
-         The round trip the verb exists for: exported bytes pushed into a node
-         land at the same hash, so a script moves between nodes unchanged. A
-         failure means export added or lost a byte — a rendering, a newline —
-         and `push < file` on the other side would accept different code.
+         The round trip the verb exists for: exported bytes imported into a
+         node land at the same hash, so a script moves between nodes unchanged.
+         A failure means export added or lost a byte — a rendering, a newline —
+         and `import < file` on the other side would accept different code.
          """
-    test "round-trips through push at the same hash" do
+    test "round-trips through import at the same hash" do
       segment = segment()
-      script = push!(segment)
+      script = import!(segment)
       {code, 0} = CLI.run(["scripts", "export", script.name])
       {:ok, _removed} = Scripts.remove(script.name)
 
-      assert {_output, 0} = CLI.run(["scripts", "push"], fn -> code end)
-      assert {:ok, pushed} = Scripts.get(script.name)
-      assert pushed.code_hash == script.code_hash
+      assert {_output, 0} = CLI.run(["scripts", "import"], fn -> code end)
+      assert {:ok, imported} = Scripts.get(script.name)
+      assert imported.code_hash == script.code_hash
     end
 
     test "refuses a script that is not there, with status 1" do
@@ -168,7 +168,7 @@ defmodule YmerNode.Scripts.CLITest do
          """
     test "main writes the export as bytes and every other answer as a line" do
       segment = segment()
-      script = push!(segment)
+      script = import!(segment)
 
       exported =
         capture_io(fn -> catch_exit(CLI.main(packed(["scripts", "export", script.name]))) end)
@@ -182,7 +182,7 @@ defmodule YmerNode.Scripts.CLITest do
     @tag doc: """
          The other half of "bytes and nothing else": the release's logger level.
          Unpinned, a release logs at `:debug` and Ecto's query lines print into
-         the operator's terminal beside the answer — a push's INSERT carrying
+         the operator's terminal beside the answer — an import's INSERT carrying
          the whole script. Read off `config/prod.exs` the way `YmerNode.McpTest`
          reads the bind, because this environment's config is never the
          release's.
@@ -195,21 +195,21 @@ defmodule YmerNode.Scripts.CLITest do
     end
   end
 
-  describe "scripts push" do
+  describe "scripts import" do
     @tag doc: """
-         The form spec D6 settled: the file's bytes arrive on stdin, so
-         `docker exec -i <c> ymer-node scripts push < file` needs no path inside
-         the container. The path form below is the other door — a path on the
-         node's own filesystem, which is where the shipped example lives.
+         The file's bytes arrive on stdin, so
+         `docker exec -i <c> ymer-node scripts import < file` needs no path
+         inside the container. The path form below is the other door — a path
+         on the node's own filesystem, which is where the shipped example lives.
          """
     test "reads the code from stdin when no file is given" do
       segment = segment()
       purge_on_exit(segment)
 
-      assert {output, 0} = CLI.run(["scripts", "push"], fn -> code(segment) end)
-      assert output =~ "Pushed #{Macro.underscore(segment)}"
+      assert {output, 0} = CLI.run(["scripts", "import"], fn -> code(segment) end)
+      assert output =~ "Imported #{Macro.underscore(segment)}"
       assert {:ok, stored} = Scripts.get(Macro.underscore(segment))
-      assert stored.origin == "pushed"
+      assert stored.origin == "imported"
     end
 
     @tag doc: """
@@ -218,23 +218,23 @@ defmodule YmerNode.Scripts.CLITest do
          node never received, sending the operator to edit a file that is
          fine; the usage error names the slip instead.
          """
-    test "refuses a push with nothing on stdin, naming the -i" do
-      assert {output, 2} = CLI.run(["scripts", "push"], fn -> "" end)
+    test "refuses an import with nothing on stdin, naming the -i" do
+      assert {output, 2} = CLI.run(["scripts", "import"], fn -> "" end)
       assert output =~ "Nothing arrived on stdin"
       assert output =~ "docker exec -i"
       assert Scripts.list() == []
     end
 
-    test "reads the file and stores it, with origin pushed", %{tmp_dir: tmp_dir} do
+    test "reads the file and stores it, with origin imported", %{tmp_dir: tmp_dir} do
       segment = segment()
       path = Path.join(tmp_dir, "script.exs")
       File.write!(path, code(segment))
       purge_on_exit(segment)
 
-      assert {output, 0} = CLI.run(["scripts", "push", path])
-      assert output =~ "Pushed #{Macro.underscore(segment)}"
+      assert {output, 0} = CLI.run(["scripts", "import", path])
+      assert output =~ "Imported #{Macro.underscore(segment)}"
       assert {:ok, stored} = Scripts.get(Macro.underscore(segment))
-      assert stored.origin == "pushed"
+      assert stored.origin == "imported"
     end
 
     @tag doc: """
@@ -244,7 +244,7 @@ defmodule YmerNode.Scripts.CLITest do
          neither, but only one is worth reporting as a node problem.
          """
     test "a missing file is a usage error, with status 2", %{tmp_dir: tmp_dir} do
-      assert {output, 2} = CLI.run(["scripts", "push", Path.join(tmp_dir, "nope.exs")])
+      assert {output, 2} = CLI.run(["scripts", "import", Path.join(tmp_dir, "nope.exs")])
       assert output =~ "Cannot read"
     end
 
@@ -252,21 +252,21 @@ defmodule YmerNode.Scripts.CLITest do
       path = Path.join(tmp_dir, "bad.exs")
       File.write!(path, "defmodule Script.Bare do\nend\n")
 
-      assert {output, 1} = CLI.run(["scripts", "push", path])
+      assert {output, 1} = CLI.run(["scripts", "import", path])
       assert output =~ "missing_contract"
     end
   end
 
   describe "scripts run" do
     test "prints the action's result as JSON" do
-      script = push!(segment())
+      script = import!(segment())
 
       assert {output, 0} = CLI.run(["scripts", "run", script.name, "ping"])
       assert JSON.decode!(output) == %{"pong" => true}
     end
 
     test "takes a JSON object of arguments" do
-      script = push!(segment())
+      script = import!(segment())
       args = ~s({"url":"https://hex.pm"})
 
       assert {output, 0} = CLI.run(["scripts", "run", script.name, "fetch", args])
@@ -274,7 +274,7 @@ defmodule YmerNode.Scripts.CLITest do
     end
 
     test "a non-object or unparseable args string is a usage error" do
-      script = push!(segment())
+      script = import!(segment())
 
       assert {output, 2} = CLI.run(["scripts", "run", script.name, "fetch", "[1,2]"])
       assert output =~ "must be a JSON object"
@@ -283,7 +283,7 @@ defmodule YmerNode.Scripts.CLITest do
     end
 
     test "forwards the runner's refusal with status 1" do
-      script = push!(segment())
+      script = import!(segment())
 
       assert {output, 1} = CLI.run(["scripts", "run", script.name, "fetch"])
       assert output =~ "invalid_args"
@@ -292,7 +292,7 @@ defmodule YmerNode.Scripts.CLITest do
 
   describe "scripts accept and remove" do
     test "accept marks stale code accepted again" do
-      script = push!(segment())
+      script = import!(segment())
 
       script
       |> Script.changeset(%{accepted_hash: "stale"})
@@ -303,7 +303,7 @@ defmodule YmerNode.Scripts.CLITest do
     end
 
     test "remove deletes it" do
-      script = push!(segment())
+      script = import!(segment())
 
       assert {output, 0} = CLI.run(["scripts", "remove", script.name])
       assert output =~ "Removed #{script.name}"
@@ -431,7 +431,7 @@ defmodule YmerNode.Scripts.CLITest do
 
       for verb <- [
             "scripts list",
-            "scripts push",
+            "scripts import",
             "scripts export",
             "secrets set",
             "scripts run",
@@ -461,9 +461,9 @@ defmodule YmerNode.Scripts.CLITest do
     on_exit(fn -> Compiler.purge(Module.concat(["Script", segment])) end)
   end
 
-  defp push!(segment) do
+  defp import!(segment) do
     purge_on_exit(segment)
-    {:ok, script} = Scripts.push(code(segment))
+    {:ok, script} = Scripts.import(code(segment))
     script
   end
 

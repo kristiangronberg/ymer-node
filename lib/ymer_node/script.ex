@@ -169,7 +169,7 @@ defmodule YmerNode.Script do
   A script is its code, and sharing one is handing the code over. From a
   session, `scripts describe` with `code: true` answers it beside the
   description; on the machine, `ymer-node scripts export <name>` prints
-  exactly the bytes the node holds, so `> file` there and `scripts push < file`
+  exactly the bytes the node holds, so `> file` there and `scripts import < file`
   elsewhere move it unchanged. On the receiving node the session runs
   `script_author check`, then `create` — acceptance is that node's own act,
   by whoever creates it there — and the person there sets whatever secrets

@@ -10,7 +10,7 @@ defmodule Script.HexTest do
 
   The script is compiled from its file on disk, through the same compiler an
   MCP `create` uses. That is deliberate: `priv/scripts/hex.exs` is what the
-  build plants on a fresh install, and what an operator can push by hand, so
+  build plants on a fresh install, and what an operator can import by hand, so
   what these cases must prove is that **the shipped bytes** satisfy the
   contract, not that some fixture resembling them does.
 
@@ -64,10 +64,10 @@ defmodule Script.HexTest do
 
   describe "the shipped file satisfies the contract" do
     @tag doc: """
-         The file on disk is what an operator pushes, so the contract has to
+         The file on disk is what an operator imports, so the contract has to
          hold for those bytes. A failure means `priv/scripts/hex.exs` and the
          node's contract drifted apart — and the operator would find out at the
-         push, with no test having said so first.
+         import, with no test having said so first.
          """
     test "compiles under the node's own compiler, deriving the name hex", %{compiled: compiled} do
       assert compiled.name == "hex"

@@ -169,7 +169,7 @@ defmodule YmerNode do
   than a restore.
 
   `YmerNode.Scripts.CLI` is the operator's door, run on the machine itself —
-  where pushing a file from a repository and setting a secret that must never
+  where importing a file from a repository and setting a secret that must never
   pass through a model's context both belong.
 
   ## The MCP surface

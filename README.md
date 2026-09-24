@@ -101,17 +101,17 @@ that should not travel through a model's context:
 
 ```sh
 docker exec -i <container> /app/bin/ymer-node scripts list
-docker exec -i <container> /app/bin/ymer-node scripts push < /path/to/script.exs
+docker exec -i <container> /app/bin/ymer-node scripts import < /path/to/script.exs
 printf 'the-value' | docker exec -i <container> /app/bin/ymer-node secrets set NAME
 docker exec -i <container> /app/bin/ymer-node throttles list
 ```
 
 A secret's value is read from stdin and never taken as an argument: an argument
 is visible in `ps` to every user on the machine, and in your shell's history to
-you. A pushed script arrives on stdin the same way; `scripts push <file>` takes
-a path inside the node's own filesystem instead. The `-i` is load-bearing for
-both: without it nothing arrives, and the verb says so. `ymer-node help` lists
-every verb.
+you. An imported script arrives on stdin the same way; `scripts import <file>`
+takes a path inside the node's own filesystem instead. The `-i` is load-bearing
+for both: without it nothing arrives, and the verb says so. `ymer-node help`
+lists every verb.
 
 A script may send its requests through a throttle it declares, which the node
 starts the first time a request names it. When a run is refused because a
@@ -190,7 +190,7 @@ script declares — never through the session: the `secrets set` line under
 Sharing a script is sharing its code. From a session, `scripts describe` with
 `code: true` answers the code, to be saved to a file; on the machine,
 `scripts export <name>` prints exactly the bytes the node holds and
-`scripts push` reads them back, so the pair moves a script between nodes
+`scripts import` reads them back, so the pair moves a script between nodes
 unchanged. In the compose install the container is `<project>-ymer-node-1`,
 the project being the install directory's name unless `COMPOSE_PROJECT_NAME`
 says otherwise — `docker ps` shows it:
@@ -199,7 +199,7 @@ says otherwise — `docker ps` shows it:
 # on the sending machine
 docker exec <container> /app/bin/ymer-node scripts export hex > hex.exs
 # on the receiving one, with hex.exs carried across
-docker exec -i <container> /app/bin/ymer-node scripts push < hex.exs
+docker exec -i <container> /app/bin/ymer-node scripts import < hex.exs
 ```
 
 A release run on the host rather than in the image has the same verbs at
@@ -207,12 +207,12 @@ A release run on the host rather than in the image has the same verbs at
 
 ```sh
 bin/ymer-node scripts export hex > hex.exs   # sending machine
-bin/ymer-node scripts push < hex.exs         # receiving one
+bin/ymer-node scripts import < hex.exs       # receiving one
 ```
 
-The two halves are two machines. Pushing an exported script back into the node
-it came from is a write like any other: it re-lands the row through the push
-door, so a script the build planted stops reading as the build's.
+The two halves are two machines. Importing an exported script back into the
+node it came from is a write like any other: it re-lands the row through the
+import door, so a script the build planted stops reading as the build's.
 
 On the receiving node the session checks the code and creates it — acceptance
 is that node's own — and whoever runs that machine sets the secrets it

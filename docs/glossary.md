@@ -112,6 +112,12 @@ _Avoid_: tutorial, manual, docs (for it), instructions (the MCP field), notes
 
 ## I
 
+### import
+`YmerNode.Scripts.import/1`
+_Avoid_: push (the verb before the rename — the CLI accepts it as a
+synonym only), load (the loader's word for compiling a script into the
+VM), upload, install (for a script)
+
 ### install
 
 The kept copy of the node on a machine: the directory holding its store, its
@@ -281,7 +287,7 @@ which sits beside it and is rebuildable.
 _Avoid_: database file, db file, notebook file, the sqlite, the data (for
 the file — `data/` is the install's directory, which holds the store).
 Never *store* as the verb for landing a script: a script is created,
-updated or pushed, and the node *holds* it.
+updated or imported, and the node *holds* it.
 
 ## T
 

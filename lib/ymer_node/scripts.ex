@@ -12,15 +12,15 @@ defmodule YmerNode.Scripts do
   `run/3` refuses unless `accepted_hash == code_hash`. That single comparison is
   the whole security claim: code that changed after it was accepted is code
   nobody accepted, so the node stops rather than running it. Today every door
-  that writes code also accepts it in the same breath — an authored script, a
-  pushed one and the example the build plants are each a deliberate act by
+  that writes code also accepts it in the same breath — an authored script, an
+  imported one and the example the build plants are each a deliberate act by
   someone who read the code — and the unaccepted state exists for the door that
   does not exist yet, registry sync, where code arrives from elsewhere and no
   one here has looked at it.
 
   ```mermaid
   stateDiagram-v2
-      [*] --> Runnable : create, push, update, plant
+      [*] --> Runnable : create, import, update, plant
 
       Runnable --> Unaccepted : sync replaces the code (later)
       Unaccepted --> Runnable : accept
@@ -67,7 +67,7 @@ defmodule YmerNode.Scripts do
   before a row exists and no write can get past them. The last three depend on
   what *else* is in the database — the references vocabulary and the other
   accepted rows — which the compiler cannot see. All five are checked at every
-  acceptance door: `create/1`, `update/2`, `push/1` and `accept/1` — and at
+  acceptance door: `create/1`, `update/2`, `import/1` and `accept/1` — and at
   `check/1`, which promises every refusal `create/1` would give. The build's
   door, `plant_example/0`, checks the host and throttle rules and not the
   name's: its name is derived from a file this repo ships, never from code
@@ -140,7 +140,7 @@ defmodule YmerNode.Scripts do
   ## Design decisions
 
   - **A write compiles before it lands, always.** `create/1`, `update/2`,
-    `push/1` and `plant_example/0` compile the code before touching the
+    `import/1` and `plant_example/0` compile the code before touching the
     database, so a row the node holds has compiled at least once on this node
     and the caller's error is a diagnostic rather than a row that never runs.
   - **Exactly one compile per call, through the loader.** The loader compiles and
@@ -174,7 +174,7 @@ defmodule YmerNode.Scripts do
     same rule holds one level down: `Macro.underscore/1` is not injective, so
     `Script.JiraAPI` derives the name `Script.JiraApi` already holds, and a
     replace that landed it would leave two module trees under one row with
-    nothing ever purging the first. `update/2` and `push/1` refuse a top module
+    nothing ever purging the first. `update/2` and `import/1` refuse a top module
     that differs from the stored code's; that rename, too, is a remove and a
     create.
   - **`create/1` refuses an existing name** rather than answering the existing
@@ -182,13 +182,13 @@ defmodule YmerNode.Scripts do
     with one uri are the same pointer; two scripts with one name are different
     code, so a silent success would hide a write that did nothing.
   - **Every door that replaces or removes a script's code refuses while a run of
-    it is in flight** — `create/1`, `update/2`, `push/1`, `accept/1`, `remove/1`
-    and `check/1` alike, because every one of them purges the tree before it
-    loads anything. `:code.purge/1` kills a process still executing the old
-    code, so landing any of them over a live run would kill a half-finished run
-    to make room — the node breaking the read-before-write rule it asks scripts
-    to keep. Each door asks `YmerNode.Scripts.Runner.in_flight?/1` first, for an
-    early refusal that names the script; the refusal that *holds* is
+    it is in flight** — `create/1`, `update/2`, `import/1`, `accept/1`,
+    `remove/1` and `check/1` alike, because every one of them purges the tree
+    before it loads anything. `:code.purge/1` kills a process still executing the
+    old code, so landing any of them over a live run would kill a half-finished
+    run to make room — the node breaking the read-before-write rule it asks
+    scripts to keep. Each door asks `YmerNode.Scripts.Runner.in_flight?/1` first,
+    for an early refusal that names the script; the refusal that *holds* is
     `YmerNode.Scripts.Loader`'s, taken in the same message as the purge, because
     a run can start between a door's own look and the purge it leads to. The
     wait is bounded by the timeout cap.
@@ -347,14 +347,14 @@ defmodule YmerNode.Scripts do
   end
 
   @doc """
-  Lands a file as a script, creating or replacing by its derived name — the CLI
-  door, origin `pushed`.
+  Lands a file as a script, creating or replacing it by its derived name,
+  accepted at those bytes — the CLI door, origin `imported`.
 
   Create-or-update rather than one or the other: a human pointing at a file has
   said what they want, and making them know first whether the node already has
   it would be a question with no purpose.
   """
-  def push(code) when is_binary(code), do: write(code, :push)
+  def import(code) when is_binary(code), do: write(code, :import)
 
   @doc """
   Plants the example script the image ships as an accepted row — the build's
@@ -590,9 +590,9 @@ defmodule YmerNode.Scripts do
 
   defp string_keys(value), do: value
 
-  # The door says who is writing: a human's file arrives pushed, the build's
+  # The door says who is writing: a human's file arrives imported, the build's
   # example arrives shipped, and everything else is authored over MCP.
-  defp origin(:push), do: "pushed"
+  defp origin(:import), do: "imported"
   defp origin(:plant), do: "shipped"
   defp origin(_authored), do: "authored"
 

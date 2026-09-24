@@ -282,6 +282,16 @@ defmodule YmerNode.ScriptsTest do
       assert Repo.aggregate(Script, :count) == 1
     end
 
+    test "stamps an imported script authored, the door of its latest write" do
+      segment = segment()
+      purge_on_exit(segment)
+      assert {:ok, imported} = Scripts.import(code(segment))
+      replacement = String.replace(code(segment), "the #{segment} script", "reworded")
+
+      assert {:ok, updated} = Scripts.update(imported.name, replacement)
+      assert updated.origin == "authored"
+    end
+
     test "refuses code whose derived name is not this script's" do
       segment = segment()
       script = create!(segment)
@@ -449,22 +459,24 @@ defmodule YmerNode.ScriptsTest do
     end
   end
 
-  describe "push/1" do
-    test "creates when the name is free, with origin pushed" do
+  describe "import/1" do
+    test "creates when the name is free, with origin imported" do
       segment = segment()
       purge_on_exit(segment)
 
-      assert {:ok, script} = Scripts.push(code(segment))
-      assert script.origin == "pushed"
+      assert {:ok, script} = Scripts.import(code(segment))
+      assert script.origin == "imported"
     end
 
     test "replaces when the name is taken" do
       segment = segment()
       create!(segment)
 
-      assert {:ok, pushed} = Scripts.push(String.replace(code(segment), "script\"", "file\""))
-      assert pushed.origin == "pushed"
-      assert pushed.description == "the #{segment} file"
+      assert {:ok, imported} =
+               Scripts.import(String.replace(code(segment), "script\"", "file\""))
+
+      assert imported.origin == "imported"
+      assert imported.description == "the #{segment} file"
       assert Repo.aggregate(Script, :count) == 1
     end
 
@@ -484,7 +496,7 @@ defmodule YmerNode.ScriptsTest do
 
       assert Macro.underscore(upper) == stored.name
 
-      assert {:error, {:module_mismatch, message}} = Scripts.push(code(upper))
+      assert {:error, {:module_mismatch, message}} = Scripts.import(code(upper))
       assert message =~ "remove #{stored.name}"
       assert {:error, {:module_mismatch, _message}} = Scripts.update(stored.name, code(upper))
 
@@ -535,12 +547,12 @@ defmodule YmerNode.ScriptsTest do
     end
 
     test "keeps an operator's own row of that name untouched" do
-      assert {:ok, pushed} = Scripts.push(File.read!(Scripts.example_path()))
-      assert pushed.origin == "pushed"
+      assert {:ok, imported} = Scripts.import(File.read!(Scripts.example_path()))
+      assert imported.origin == "imported"
 
       assert {:ok, kept} = Scripts.plant_example()
-      assert kept.id == pushed.id
-      assert kept.origin == "pushed"
+      assert kept.id == imported.id
+      assert kept.origin == "imported"
     end
 
     @tag doc: """
