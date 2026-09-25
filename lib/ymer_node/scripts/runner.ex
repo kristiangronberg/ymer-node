@@ -1,7 +1,8 @@
 defmodule YmerNode.Scripts.Runner do
   @moduledoc """
-  One run of one action — what is checked before it, the process it happens in,
-  and the shape of every answer that comes back.
+  One run — one execution of one action of one accepted script, whoever started
+  it — and what is checked before it, the process it happens in, and the shape of
+  every answer that comes back.
 
   A run never happens in the caller's process. Each one is a child of
   `YmerNode.Scripts.TaskSupervisor`, awaited with a deadline and killed when the
@@ -27,9 +28,9 @@ defmodule YmerNode.Scripts.Runner do
 
   Thirty seconds unless the action asks for more, and never more than five
   minutes — `deadline/1` is the whole rule. The cap is the node's and not the
-  script's: the node itself will schedule scripts later (a fetch-and-cache pass
-  over the references it derives), and a run with no bound the node imposed
-  would hold that slot forever.
+  script's: the node runs scripts on its own schedules (`YmerNode.Schedules`),
+  with nobody waiting on the answer, and a run with no bound the node imposed
+  would hold its slot forever.
 
   A run that passes its deadline is killed with `:brutal_kill` — no cleanup, no
   `terminate`. **Whatever it had already done outside this VM stands**: a row
@@ -181,6 +182,38 @@ defmodule YmerNode.Scripts.Runner do
   """
   def in_flight?(name) when is_binary(name), do: Registry.lookup(@registry, name) != []
 
+  @doc """
+  Checks one call the way a run would, without running it — whether the script
+  is accepted and compiled, whether it serves the action, and whether the
+  arguments satisfy that action's schema — and answers the schema.
+
+  Read from this boot's compile (`YmerNode.Scripts.Loader.facts/1`) rather than
+  from the script's own `actions/0`, so no script code runs: a door storing an
+  instruction to run later can refuse now what the run would refuse then. Every
+  refusal is one `run/3` gives.
+  """
+  def check(%Script{} = script, action, args) when is_binary(action) and is_map(args) do
+    with :ok <- check_accepted(script),
+         {:ok, facts} <- loaded(script),
+         {:ok, name, schema} <- resolve_action(script, facts.actions, action),
+         :ok <- check_args(script, name, schema, args) do
+      {:ok, schema}
+    end
+  end
+
+  @doc """
+  The longest one run of an action can take before it answers — the metadata
+  read's bound and then the action's deadline — so a caller starting a run now
+  can say when it ends at the latest.
+
+  ## Examples
+
+      iex> YmerNode.Scripts.Runner.longest(%{properties: %{}, write: false})
+      35000
+
+  """
+  def longest(schema) when is_map(schema), do: @metadata_timeout + deadline(schema)
+
   # ─── Before the run ─────────────────────────────────────────────────
 
   # One entry for the whole call, taken here and released whatever happens —
@@ -218,9 +251,13 @@ defmodule YmerNode.Scripts.Runner do
     end
   end
 
-  defp loaded_module(%Script{name: name}) do
+  defp loaded_module(%Script{} = script) do
+    with {:ok, facts} <- loaded(script), do: {:ok, facts.module}
+  end
+
+  defp loaded(%Script{name: name}) do
     case Loader.facts(name) do
-      %{loaded?: true, module: module} -> {:ok, module}
+      %{loaded?: true} = facts -> {:ok, facts}
       %{error: {reason, detail}} -> {:error, {:not_loaded, "#{name}: #{reason} — #{detail}"}}
       nil -> {:error, {:not_loaded, "#{name} has not been compiled since this node started"}}
     end

@@ -46,11 +46,11 @@ defmodule YmerNode.Mcp.McpServer do
       yourself. Store pointers and routing notes, never copies of what they
       point at. Until registry sync lands, a reference added here lives only on
       this machine.
-    - scripts — Elixir modules this node has accepted, for systems with no
-      built-in support. Read scripts guide before writing one, and scripts info
-      for each promised package you use; describe before you run: an action's
-      write mark says whether it changes anything outside this machine.
-      script_author writes them.
+    - scripts — accepted Elixir modules, for systems with no built-in
+      support. Read scripts guide before writing one, and scripts info for
+      each promised package you use; describe before you run: an action's
+      write mark says whether it writes off this machine. script_author
+      writes them; schedules runs them unattended.
 
     Ymer Node and ymer are two halves of one product. ymer holds tasks,
     projects, docs and memories — the coordination every client can reach.

@@ -180,7 +180,14 @@ defmodule YmerNode.Script.Context do
   release's zone database does not know, so a dev or test node answers
   `Etc/UTC`.
   """
-  def time_zone(%__MODULE__{}) do
+  def time_zone(%__MODULE__{}), do: time_zone()
+
+  @doc """
+  What `time_zone/1` answers, for a caller holding no run context:
+  `YmerNode.Schedules` reads a cron expression and an offset-less lifetime in
+  this zone, and renders every time it answers in it.
+  """
+  def time_zone do
     :ymer_node
     |> Application.get_env(__MODULE__, [])
     |> Keyword.get(:time_zone, "Etc/UTC")

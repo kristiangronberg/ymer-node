@@ -669,6 +669,41 @@ defmodule YmerNode.Scripts.RunnerTest do
     end
   end
 
+  describe "check/3" do
+    test "answers the action's schema for a call the run would serve, running nothing" do
+      script = accepted(@greeter)
+
+      assert {:ok, %{required: ["name"]}} = Runner.check(script, "greet", %{"name" => "x"})
+      refute Runner.in_flight?(script.name)
+    end
+
+    test "refuses what the run would refuse, with the run's own reasons" do
+      script = accepted(@greeter)
+      stale = %{script | accepted_hash: Script.hash("some other code")}
+
+      assert {:error, {:not_accepted, _detail}} = Runner.check(stale, "greet", %{"name" => "x"})
+      assert {:error, {:unknown_action, message}} = Runner.check(script, "fetch", %{})
+      assert message =~ "has no action fetch"
+      assert {:error, {:invalid_args, missing}} = Runner.check(script, "greet", %{})
+      assert missing =~ "property 'name' is required"
+    end
+
+    test "refuses a script this node has not compiled" do
+      code = "defmodule Script.NeverChecked do\nend\n"
+      hash = Script.hash(code)
+
+      script = %Script{
+        name: "never_checked_#{System.unique_integer([:positive])}",
+        code: code,
+        code_hash: hash,
+        accepted_hash: hash
+      }
+
+      assert {:error, {:not_loaded, message}} = Runner.check(script, "anything", %{})
+      assert message =~ "has not been compiled since this node started"
+    end
+  end
+
   defp files_dir do
     :ymer_node
     |> Application.get_env(YmerNode.Script.Context)

@@ -122,6 +122,7 @@ defmodule YmerNode.Scripts do
       subgraph external
           Repo[(YmerNode.Repo)]
           Sources[References.Sources]
+          InFlight[Schedules.InFlight]
       end
 
       S -->|"parse before every write"| Compiler
@@ -130,6 +131,7 @@ defmodule YmerNode.Scripts do
       S --> Script
       S --> Repo
       S -->|"reserved names, claimed hosts"| Sources
+      S -->|"the refusal naming a firing's schedule"| InFlight
   ```
 
   The store and the VM are two different truths and this module is where they
@@ -223,6 +225,7 @@ defmodule YmerNode.Scripts do
 
   alias YmerNode.References.Sources
   alias YmerNode.Repo
+  alias YmerNode.Schedules.InFlight
   alias YmerNode.Scripts.Compiler
   alias YmerNode.Scripts.Loader
   alias YmerNode.Scripts.Runner
@@ -456,7 +459,8 @@ defmodule YmerNode.Scripts do
   end
 
   @doc """
-  Deletes a script and unloads its module tree.
+  Deletes a script and unloads its module tree, answering the row that went and
+  the names of the schedules the database deleted with it.
 
   Refuses while a run of that script is in flight, for the same reason
   `update/2` does.
@@ -464,8 +468,8 @@ defmodule YmerNode.Scripts do
   def remove(name) when is_binary(name) do
     with {:ok, script} <- get(name),
          :ok <- check_idle(name),
-         {:ok, _deleted} <- unload(script, fn -> delete_row(script) end) do
-      {:ok, script}
+         {:ok, schedules} <- unload(script, fn -> delete_row(script) end) do
+      {:ok, %{script: script, schedules: schedules}}
     end
   end
 
@@ -474,10 +478,30 @@ defmodule YmerNode.Scripts do
   # remove racing another remove finds the row already gone: that is
   # `not_found`, rendered like every other refusal, not a match failing at a
   # door where every other answer is a message.
+  #
+  # The schedules' names are read in the same breath, because the delete
+  # cascades to their rows and nothing can name them afterwards — and in one
+  # transaction that takes the write lock before it reads, so a schedule added
+  # for this script cannot land between the read and the delete and go
+  # unnamed; one that comes after finds the script gone. The table is read by
+  # its name rather than through `YmerNode.Schedules.Schedule`: the schedule
+  # schema and context depend on this module, not the other way round.
   defp delete_row(%Script{id: id, name: name}) do
+    Repo.transaction(fn -> delete_named(id, name) end, mode: :immediate)
+  end
+
+  defp delete_named(id, name) do
+    schedules =
+      Repo.all(
+        from schedule in "schedules",
+          where: schedule.script_id == ^id,
+          order_by: schedule.name,
+          select: schedule.name
+      )
+
     case Repo.delete_all(from s in Script, where: s.id == ^id) do
-      {1, _rows} -> {:ok, :deleted}
-      {0, _rows} -> {:error, not_found(name)}
+      {1, _rows} -> schedules
+      {0, _rows} -> Repo.rollback(not_found(name))
     end
   end
 
@@ -487,9 +511,9 @@ defmodule YmerNode.Scripts do
   Runs one action of one script.
 
   The node's own callers reach a script through here and not through
-  `YmerNode.Scripts.Runner` directly, so a scheduled run inside the node gets the
-  same acceptance check, the same batteries, the same deadline and the same
-  isolation an MCP call gets.
+  `YmerNode.Scripts.Runner` directly, so the run a schedule's firing starts
+  (`YmerNode.Schedules`) gets the same acceptance check, the same batteries, the
+  same deadline and the same isolation an MCP call gets.
   """
   def run(name, action, args) when is_binary(name) and is_binary(action) and is_map(args) do
     with {:ok, script} <- get(name) do
@@ -731,7 +755,7 @@ defmodule YmerNode.Scripts do
 
   defp check_idle(name) do
     if Runner.in_flight?(name) do
-      {:error, {:run_in_flight, "#{name} has a run in flight; retry when it ends"}}
+      {:error, InFlight.refusal(name)}
     else
       :ok
     end

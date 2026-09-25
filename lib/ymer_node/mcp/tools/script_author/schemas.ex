@@ -98,7 +98,8 @@ defmodule YmerNode.Mcp.Tools.ScriptAuthor.Schemas do
         "Hard delete, and the code is not kept anywhere — take a copy first if " <>
           "it is not in a repository. Any reference whose source this script " <>
           "declared falls back to its built-in classification the same moment. " <>
-          "Refused while a run of that script is in flight.",
+          "Its schedules are removed with it, and the answer names them. Refused " <>
+          "while a run of that script is in flight.",
       related: ["update", "create"]
     }
   }

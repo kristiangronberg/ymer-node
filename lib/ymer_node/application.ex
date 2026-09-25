@@ -28,6 +28,20 @@ defmodule YmerNode.Application do
   # the loader: a throttle is started by the first request that names it, and
   # only a run of a loaded script makes a request.
   #
+  # The schedules' process registry comes up beside them, before the loader,
+  # because the loader reads it: a refusal to replace a script while a firing's
+  # run of it is in flight names the schedule, and the refusal that holds is
+  # taken inside the loader's own message.
+  #
+  # The scheduler comes up after the loader and after the notebook's own
+  # children, just ahead of the listener, with its firing supervisor ahead of
+  # it. A firing runs a script the loader has to have compiled, and that script
+  # may read or write the notebook: a firing is a call the node makes of
+  # itself, and like the listener's calls it must never reach a notebook that
+  # is not up. Neither is part of a script's run, so neither joins
+  # `run_tree/0`: a run a firing starts is a run like any other, under the
+  # runner's task supervisor.
+  #
   # Public, and `@doc false`, ONLY so a test can read the list back — it is the
   # one way to gate a rule about a list. Two tests do: `YmerNode.ApplicationTest`
   # gates the order above, and `YmerNode.ScriptHarnessTest` pins
@@ -43,11 +57,14 @@ defmodule YmerNode.Application do
       {Task.Supervisor, name: YmerNode.Scripts.TaskSupervisor},
       {Registry, keys: :unique, name: YmerNode.Scripts.Throttles},
       {DynamicSupervisor, name: YmerNode.Scripts.ThrottleSupervisor, strategy: :one_for_one},
+      {Registry, keys: :unique, name: YmerNode.Schedules.InFlight},
       migrator(),
       YmerNode.Scripts.Loader,
       YmerNode.Notebook.Repo,
       YmerNode.Notebook.VecLoadCheck,
       YmerNode.Notebook.Backup.Lock,
+      {Task.Supervisor, name: YmerNode.Schedules.FiringSupervisor},
+      YmerNode.Schedules.Scheduler,
       mcp_endpoint()
     ]
   end

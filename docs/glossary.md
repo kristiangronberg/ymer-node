@@ -97,6 +97,12 @@ user's); inbox, outbox, drop folder, gateway, share, exchange
 directory; mount, volume (for it — the mount is `/data`, which holds
 it); `FILES_PATH` names the variable that sets it, never the directory
 
+### firing
+The moment a schedule comes due in the node time zone; it starts a run, or is
+skipped when the node was not up or the schedule's previous run is still in
+flight.
+_Avoid_: occurrence, tick, run (for the moment), trigger
+
 ## G
 
 ### guide
@@ -129,6 +135,12 @@ _Avoid_: install dir (as a term of its own — the install's directory is the
 install), the directory you keep, runner compose, prod (as a noun for it)
 
 ## L
+
+### lifetime
+How far into the future a schedule keeps firing — an end the node sets at `add`
+or `update`, never more than 90 days ahead; past it the schedule is expired.
+Read by `YmerNode.Schedules.Lifetime`.
+_Avoid_: deadline (the one-run bound), expiry, TTL, duration (for it)
 
 ### live output
 `Mix.Tasks.YmerNode.Build.LiveOutput`
@@ -232,6 +244,10 @@ no git, or no work tree — carries it nowhere and answers the bare version.
 
 _Avoid_: stamp, sha stamp, build id
 
+### run
+`YmerNode.Scripts.Runner`
+_Avoid_: job
+
 ### run tree
 `YmerNode.Script.Harness.run_tree/0`
 _Avoid_: throttle tree (it holds more than throttles), node processes,
@@ -243,6 +259,11 @@ compound-qualified
 ### safety backup
 `YmerNode.Notebook.Backup.restore/1`
 _Avoid_: undo anchor, regret button
+
+### schedule
+`YmerNode.Schedules.Schedule`
+_Avoid_: scheduling (bare), trigger, job, timer, cron (for the schedule — the
+field is its cron expression)
 
 ### script
 `YmerNode.Scripts.Script`

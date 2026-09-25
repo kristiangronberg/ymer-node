@@ -173,12 +173,14 @@ defmodule YmerNode.ScriptContextTest do
       )
 
       assert Context.time_zone(context()) == "Europe/Helsinki"
+      assert Context.time_zone() == "Europe/Helsinki"
     end
 
     test "answers Etc/UTC when no zone is configured" do
       Application.delete_env(:ymer_node, Context)
 
       assert Context.time_zone(context()) == "Etc/UTC"
+      assert Context.time_zone() == "Etc/UTC"
     end
   end
 

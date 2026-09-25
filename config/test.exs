@@ -109,3 +109,10 @@ config :ymer_node, YmerNode.Scripts.Loader, boot_compile: false
 # must hold only what a case wrote, so every listing a case asserts on starts
 # empty. `YmerNode.ScriptsTest` calls `plant_example/0` itself.
 config :ymer_node, YmerNode.Scripts, plant_example: false
+
+# The scheduler reads the node database every minute, and at application start
+# the sandbox holds no checked-out connection — the ground the loader's boot
+# compile is off on, above. `YmerNode.Schedules.SchedulerTest` drives its
+# `plan/4`, `YmerNode.Schedules.SchedulerMinuteTest` hands it one minute inside
+# its own sandbox, and `YmerNode.SchedulesTest` calls `fire/2` itself.
+config :ymer_node, YmerNode.Schedules.Scheduler, enabled: false

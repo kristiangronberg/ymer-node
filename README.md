@@ -96,6 +96,10 @@ it is not sandboxed — so the question worth your attention is not what a scrip
 does but whether you meant to accept it. The other tools reach nothing but this
 machine's own store and the scripts you already accepted.
 
+**Set `schedules` to ask as well.** A schedule runs an accepted script's action
+with nobody watching, for up to 90 days, so adding one is the other decision
+worth your attention: which action, how often, and for how long.
+
 The operator's verbs run on the machine itself, and are the door for anything
 that should not travel through a model's context:
 
@@ -104,6 +108,7 @@ docker exec -i <container> /app/bin/ymer-node scripts list
 docker exec -i <container> /app/bin/ymer-node scripts import < /path/to/script.exs
 printf 'the-value' | docker exec -i <container> /app/bin/ymer-node secrets set NAME
 docker exec -i <container> /app/bin/ymer-node throttles list
+docker exec -i <container> /app/bin/ymer-node schedules list
 ```
 
 A secret's value is read from stdin and never taken as an argument: an argument

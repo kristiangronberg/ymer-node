@@ -75,6 +75,8 @@ defmodule YmerNode.Scripts.CLI do
   every verb is exercised without a release, a shell or a terminal, which is
   what the whole rest of this module's tests do.
   """
+  alias YmerNode.Mcp.Tools.Helpers
+  alias YmerNode.Schedules
   alias YmerNode.Scripts
   alias YmerNode.Scripts.Throttle
   alias YmerNode.Secrets
@@ -155,6 +157,16 @@ defmodule YmerNode.Scripts.CLI do
 
   def run(["throttles", "list"], _stdin), do: throttles_list()
   def run(["throttles", "reset", name], _stdin), do: throttle_reset(name)
+
+  def run(["schedules", "list"], _stdin), do: schedules_list()
+
+  def run(["schedules", "add", name, script, action, expression | options], _stdin) do
+    attrs = %{name: name, script: script, action: action, cron_expression: expression}
+    schedule_add(attrs, options)
+  end
+
+  def run(["schedules", "update", name | options], _stdin), do: schedule_update(name, options)
+  def run(["schedules", "remove", name], _stdin), do: schedule_remove(name)
 
   def run(["help"], _stdin), do: {usage(), 0}
   def run([], _stdin), do: {usage(), 2}
@@ -243,10 +255,21 @@ defmodule YmerNode.Scripts.CLI do
 
   defp remove(name) do
     case Scripts.remove(name) do
-      {:ok, script} -> {"Removed #{script.name}", 0}
-      {:error, reason} -> refusal(reason)
+      {:ok, %{script: script, schedules: schedules}} ->
+        {"Removed #{script.name}#{with_schedules(schedules)}", 0}
+
+      {:error, reason} ->
+        refusal(reason)
     end
   end
+
+  # The schedules the database removed with the script, named so the operator
+  # learns what else stopped running.
+  defp with_schedules([]), do: ""
+  defp with_schedules([schedule]), do: " and its schedule #{schedule}"
+
+  defp with_schedules(schedules),
+    do: " and its #{length(schedules)} schedules: #{Enum.join(schedules, ", ")}"
 
   defp written({:ok, script}, verb), do: {"#{verb} #{script.name}", 0}
   defp written({:error, reason}, _verb), do: refusal(reason)
@@ -361,6 +384,97 @@ defmodule YmerNode.Scripts.CLI do
     end
   end
 
+  # ─── schedules ──────────────────────────────────────────────────────
+
+  defp schedules_list do
+    case Schedules.list() do
+      [] ->
+        {"No schedules. Add one with: ymer-node schedules add <name> <script> <action> " <>
+           "'<cron expression>'", 0}
+
+      schedules ->
+        {Enum.map_join(schedules, "\n", &schedule_lines/1), 0}
+    end
+  end
+
+  # Three lines a schedule — what runs, when, and how the last run went — with
+  # every time as the node answers it, in the node's time zone.
+  defp schedule_lines(schedule) do
+    Enum.join(
+      [
+        "#{schedule.state}  #{schedule.name}  #{schedule.script} #{schedule.action} " <>
+          JSON.encode!(schedule.args),
+        "    #{schedule.cron_expression}  next #{schedule.next_firing || "none"}  " <>
+          "ends #{schedule.ends_at}",
+        "    " <> last_run_text(schedule.last_run)
+      ],
+      "\n"
+    )
+  end
+
+  defp last_run_text(nil), do: "no run yet"
+
+  defp last_run_text(run) do
+    "last run #{run.fired_at} #{run.outcome} (#{run.took_ms} ms)" <>
+      if(run.message, do: " — #{run.message}", else: "")
+  end
+
+  defp schedule_add(attrs, options) do
+    with {:ok, parsed} <- schedule_options(options, args: :string, lifetime: :string) do
+      attrs |> Map.merge(parsed) |> Schedules.add() |> schedule_written("Added")
+    end
+  end
+
+  defp schedule_update(name, options) do
+    with {:ok, changes} <-
+           schedule_options(options, cron: :string, args: :string, lifetime: :string) do
+      name |> Schedules.update(changes) |> schedule_written("Updated")
+    end
+  end
+
+  defp schedule_remove(name) do
+    case Schedules.remove(name) do
+      {:ok, schedule} -> {"Removed #{schedule.name}", 0}
+      {:error, reason} -> refusal(reason)
+    end
+  end
+
+  # `--cron` arrives under the name the context takes, and `--args` as JSON; a
+  # switch the verb does not take is a usage error, never ignored.
+  defp schedule_options(options, switches) do
+    case OptionParser.parse(options, strict: switches) do
+      {parsed, [], []} -> typed_options(Map.new(parsed))
+      {_parsed, _rest, _invalid} -> {"Unrecognised options: #{Enum.join(options, " ")}", 2}
+    end
+  end
+
+  defp typed_options(options) do
+    {cron, options} = Map.pop(options, :cron)
+    options = if cron, do: Map.put(options, :cron_expression, cron), else: options
+
+    case Map.fetch(options, :args) do
+      :error -> {:ok, options}
+      {:ok, text} -> decoded_args(options, text)
+    end
+  end
+
+  defp decoded_args(options, text) do
+    case decode_args(text) do
+      {:ok, args} -> {:ok, %{options | args: args}}
+      {:error, {:bad_json, message}} -> {"args must be a JSON object: #{message}", 2}
+    end
+  end
+
+  defp schedule_written({:ok, schedule}, verb) do
+    next = schedule.next_firing || "none before its end"
+    {"#{verb} #{schedule.name}: next firing #{next}, ends #{schedule.ends_at}", 0}
+  end
+
+  defp schedule_written({:error, %Ecto.Changeset{} = changeset}, _verb),
+    do: {"The schedule could not be stored: #{Helpers.format_changeset_errors(changeset)}", 1}
+
+  defp schedule_written({:error, reason}, _verb), do: refusal(reason)
+
   # ─── shared ─────────────────────────────────────────────────────────
 
   # Status 1, never 2: a refusal is the node declining something the operator
@@ -387,6 +501,11 @@ defmodule YmerNode.Scripts.CLI do
 
       throttles list              the throttles this node has started
       throttles reset <name>      close an open breaker and clear its count
+
+      schedules list              every schedule: next firing, end, last run
+      schedules add <name> <script> <action> '<cron expression>' [--args json] [--lifetime iso]
+      schedules update <name> [--cron '<cron expression>'] [--args json] [--lifetime iso]
+      schedules remove <name>
 
     Every verb runs against the node already serving on this machine.\
     """

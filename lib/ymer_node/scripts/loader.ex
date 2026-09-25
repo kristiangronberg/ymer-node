@@ -99,6 +99,7 @@ defmodule YmerNode.Scripts.Loader do
   import Ecto.Query, only: [from: 2]
 
   alias YmerNode.Repo
+  alias YmerNode.Schedules.InFlight
   alias YmerNode.Scripts.Compiler
   alias YmerNode.Scripts.Script
 
@@ -405,7 +406,7 @@ defmodule YmerNode.Scripts.Loader do
     if Registry.lookup(@registry, name) == [] do
       :ok
     else
-      {:error, {:run_in_flight, "#{name} has a run in flight; retry when it ends"}}
+      {:error, InFlight.refusal(name)}
     end
   end
 

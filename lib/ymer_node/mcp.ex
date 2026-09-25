@@ -56,6 +56,7 @@ defmodule YmerNode.Mcp do
     tools: [
       YmerNode.Mcp.Tools.Notebook,
       YmerNode.Mcp.Tools.References,
+      YmerNode.Mcp.Tools.Schedules,
       YmerNode.Mcp.Tools.ScriptAuthor,
       YmerNode.Mcp.Tools.Scripts
     ],

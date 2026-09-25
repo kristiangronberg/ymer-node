@@ -4,7 +4,7 @@ defmodule YmerNode.MixProject do
   def project do
     [
       app: :ymer_node,
-      version: "0.2.3",
+      version: "0.3.0",
       elixir: "~> 1.19",
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
@@ -72,13 +72,12 @@ defmodule YmerNode.MixProject do
     [
       {:bandit, "~> 1.12.5"},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
+      {:crontab, "~> 1.2"},
       {:ecto_sql, "~> 3.13"},
       {:ecto_sqlite3, "~> 0.25"},
       {:elixlsx, "~> 0.6.0"},
       {:ex_doc, "~> 0.40.4", only: [:dev, :test], runtime: false},
       {:ex_slop, "~> 0.4.5", only: [:dev, :test], runtime: false},
-      # HTML a script reads into markdown — a wiki page, a mail body. Pure
-      # Elixir, with no dependencies of its own.
       {:floki, "~> 0.38.4"},
       # Direct although wymcp already locks it transitively: the node validates a
       # run's arguments against the action's own schema, so jsv is a dependency
@@ -124,7 +123,7 @@ defmodule YmerNode.MixProject do
       # `:iana_version` — and move the Dockerfile's `COPY priv` above its
       # `mix deps.compile`, which today runs first.
       {:tz, "~> 0.28.2"},
-      {:wymcp, "~> 0.8.3"},
+      {:wymcp, "~> 0.8.4"},
       {:xlsx_reader, "~> 0.8.12"}
     ]
   end

@@ -63,6 +63,35 @@ defmodule YmerNode.ApplicationTest do
     end
 
     @tag doc: """
+         The loader reads the schedules' process registry inside the message
+         that purges a script, to name the schedule whose firing holds a run.
+         A failure means that read could meet no process registry at all, and
+         a write refused for a run in flight would crash the loader instead.
+         """
+    test "the schedules' process registry sits before the loader" do
+      assert position(YmerNode.Schedules.InFlight) < position(YmerNode.Scripts.Loader)
+    end
+
+    @tag doc: """
+         A firing runs a script the loader has to have compiled, that script
+         may use the notebook, and the firing runs in a task under the firing
+         supervisor. A failure means the scheduler could start a firing before
+         one of them exists: a run answered "not loaded" for a script that is,
+         a notebook call meeting no repo, or a firing dying with a `:noproc`
+         exit.
+         """
+    test "the scheduler sits after the loader, the notebook and its firing supervisor" do
+      assert position(YmerNode.Scripts.Loader) < position(YmerNode.Schedules.Scheduler)
+      assert position(YmerNode.Notebook.Repo) < position(YmerNode.Schedules.Scheduler)
+      assert position(YmerNode.Notebook.Backup.Lock) < position(YmerNode.Schedules.Scheduler)
+
+      assert position(YmerNode.Schedules.FiringSupervisor) <
+               position(YmerNode.Schedules.Scheduler)
+
+      assert position(YmerNode.Schedules.Scheduler) < position(:listener)
+    end
+
+    @tag doc: """
          The control for the order cases above: every position they compare has
          to resolve, or a renamed child would make `nil < nil` and the cases
          would pass while guarding nothing.
@@ -72,8 +101,13 @@ defmodule YmerNode.ApplicationTest do
             :migrator,
             :listener,
             YmerNode.Scripts.Loader,
+            YmerNode.Notebook.Repo,
+            YmerNode.Notebook.Backup.Lock,
+            YmerNode.Schedules.FiringSupervisor,
+            YmerNode.Schedules.Scheduler,
             YmerNode.Scripts.TaskSupervisor,
             YmerNode.Scripts.Throttles,
+            YmerNode.Schedules.InFlight,
             YmerNode.Scripts.ThrottleSupervisor
           ] do
         assert is_integer(position(name)), "#{inspect(name)} is not in children/0"

@@ -96,6 +96,6 @@ intends and has not released.
 | Web UI test automation | Playwright | planned; the browser itself is a service |
 | Images, charts | vix, image | a service or an image of your own; SVG through `EEx` needs nothing |
 | Crypto, JWT, TOTP | `:crypto`, `:public_key`; jose | the release; TOTP is a library; JWT a battery when an assertion flow needs it |
-| Scheduling | a trigger | a node feature, not a battery |
+| Scheduling | a schedule, `YmerNode.Schedules` | a node feature, not a battery |
 | Storage, state, vectors | the notebook | the release |
 | Shell commands | `System.cmd/3` | reachable under the trust model, never promised |

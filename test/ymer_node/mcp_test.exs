@@ -98,7 +98,8 @@ defmodule YmerNode.McpTest do
       # `help` is not declared at the mount: Wymcp appends it to every server
       # under that reserved name, so it is part of the surface a client meets
       # and belongs in an exact-list assertion.
-      assert Enum.sort(names) == ["help", "notebook", "references", "script_author", "scripts"]
+      assert Enum.sort(names) ==
+               ["help", "notebook", "references", "schedules", "script_author", "scripts"]
     end
 
     @tag doc: """
@@ -114,6 +115,7 @@ defmodule YmerNode.McpTest do
       assert instructions =~ "references"
       assert instructions =~ "scripts"
       assert instructions =~ "script_author"
+      assert instructions =~ "schedules"
     end
 
     @tag doc: """

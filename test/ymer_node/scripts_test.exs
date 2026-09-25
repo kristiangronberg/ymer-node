@@ -23,6 +23,7 @@ defmodule YmerNode.ScriptsTest do
   """
   use YmerNode.DataCase
 
+  alias YmerNode.Schedules.InFlight
   alias YmerNode.Scripts
   alias YmerNode.Scripts.Compiler
   alias YmerNode.Scripts.Loader
@@ -683,6 +684,38 @@ defmodule YmerNode.ScriptsTest do
       assert Repo.aggregate(Script, :count) == 1
 
       assert {:ok, %{"slept" => true}} = Task.await(run)
+    end
+
+    test "names the schedule whose firing holds the run, and the run's latest end" do
+      script = napping!(segment())
+      schedule = "hourly-#{System.unique_integer([:positive])}"
+      id = System.unique_integer([:positive])
+      :ok = InFlight.register(id, schedule, script.name, ~U[2026-09-25 10:05:00Z])
+      run = Task.async(fn -> Scripts.run(script.name, "naps", %{}) end)
+
+      assert wait_until(fn -> Runner.in_flight?(script.name) end)
+
+      assert {:error, {:run_in_flight, message}} = Scripts.remove(script.name)
+      assert message =~ "from schedule #{schedule} until 2026-09-25T10:05:00Z at the latest"
+
+      assert {:ok, %{"slept" => true}} = Task.await(run)
+    end
+
+    test "answers the names of the schedules the database removed with it" do
+      script = create!(segment())
+
+      for name <- ["weekly-summary", "morning-report"] do
+        {:ok, _entry} =
+          YmerNode.Schedules.add(%{
+            name: name,
+            script: script.name,
+            action: "ping",
+            cron_expression: "0 7 * * *"
+          })
+      end
+
+      assert {:ok, %{script: %Script{}, schedules: ["morning-report", "weekly-summary"]}} =
+               Scripts.remove(script.name)
     end
   end
 

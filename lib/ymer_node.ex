@@ -10,6 +10,13 @@ defmodule YmerNode do
   loopback — pinned by the bind when the node runs directly, and by the host
   publish when it runs in a container (`YmerNode.Mcp` owns that distinction).
 
+  The line against a work engine falls here: on its own, the node does one
+  thing — it runs an accepted script's action on a schedule, with fixed args and
+  nobody there (`YmerNode.Schedules`). It is a script runner with scheduling
+  flexibility, not a reliable scheduler, and nothing it runs is routed, chained,
+  retried or handed to a model; anything that needs a task, a claim or an LLM is
+  ymer's.
+
   Two properties shape everything below. **Local serving never depends on ymer**:
   every tool here answers whether or not the node can reach anything, so an
   unreachable ymer degrades identity, never capability. And **the node owns one
@@ -31,6 +38,7 @@ defmodule YmerNode do
       Backup[Notebook/Backup]
       References[References]
       Scripts[Scripts]
+      Schedules[Schedules]
 
       NotebookDB[(notebook.db)]
       NodeDB[(node.db)]
@@ -51,6 +59,10 @@ defmodule YmerNode do
       Scripts -->|"a run's batteries"| Notebook
       Scripts --> SecretsFile
       Scripts -->|"a run reads and writes files"| FilesDir
+      Mcp -->|"serves the schedules tool"| Schedules
+      Schedules -->|"runs an action at each firing"| Scripts
+      Scripts -->|"the schedule holding a run in flight"| Schedules
+      Schedules --> NodeDB
       Backup -->|"VACUUM INTO"| NotebookDB
       Backup --> BackupFiles
   ```
@@ -182,6 +194,21 @@ defmodule YmerNode do
   guide names one of them only where `YmerNode.Script.Context.files_dir/1`
   refuses an unset directory, as the fix for a VM outside the node.
 
+  ## Schedules
+
+  `YmerNode.Schedules` is how a script runs with nobody there. A schedule is a
+  standing instruction to run one action of one accepted script, with fixed args,
+  on a cron expression in the node's time zone, until its
+  [*lifetime*](docs/glossary.md#lifetime) ends — 90 days at most, because a
+  schedule nobody remembers must not fire for ever. It exists because a report
+  wanted at 07:00, or a check every hour, cannot wait for a session to ask, and
+  one mechanism serves every such need. A firing runs through
+  `YmerNode.Scripts.run/3`, so everything the Scripts section says of a run holds
+  for it. A schedule lives in `node.db` beside its script and is deleted with
+  it: it means nothing without the script it runs, so it shares that row's fate
+  under the durability rule. `YmerNode.Schedules.Scheduler` is the clock that
+  fires them.
+
   ## The MCP surface
 
   `YmerNode.Mcp` is the mount: the node's entire external surface, and the one
@@ -189,8 +216,9 @@ defmodule YmerNode do
   a client is handed at connect — including the paragraph naming ymer as the other
   half of the product, which is the only way a client learns the node is not the
   whole story. `YmerNode.Mcp.Tools.Notebook`, `YmerNode.Mcp.Tools.References`,
-  `YmerNode.Mcp.Tools.Scripts` and `YmerNode.Mcp.Tools.ScriptAuthor` are the
-  tools themselves, each a thin boundary over its own context;
+  `YmerNode.Mcp.Tools.Scripts`, `YmerNode.Mcp.Tools.ScriptAuthor` and
+  `YmerNode.Mcp.Tools.Schedules` are the tools themselves, each a thin boundary
+  over its own context;
   `YmerNode.Mcp.Tools.Helpers` holds the handful of shaping functions their
   action layers share, and `YmerNode.Mcp.Tools.ScriptFormat` the rendering the
   two script tools share.
@@ -198,5 +226,8 @@ defmodule YmerNode do
   Running and authoring are two tools rather than one so that a client can be
   granted the first without the second: what runs is bounded by what has been
   accepted, and accepting is the decision worth a human's attention.
+  The `schedules` tool is a third for the same reason: a client allowed to run
+  what has been accepted is not thereby allowed to set it running with nobody
+  watching.
   """
 end

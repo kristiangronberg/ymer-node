@@ -309,6 +309,25 @@ defmodule YmerNode.Scripts.CLITest do
       assert output =~ "Removed #{script.name}"
       assert {:error, _reason} = Scripts.get(script.name)
     end
+
+    test "remove names the schedules that went with it" do
+      script = import!(segment())
+
+      for name <- ["morning-report", "weekly-summary"] do
+        {:ok, _entry} =
+          YmerNode.Schedules.add(%{
+            name: name,
+            script: script.name,
+            action: "ping",
+            cron_expression: "0 7 * * *"
+          })
+      end
+
+      assert {output, 0} = CLI.run(["scripts", "remove", script.name])
+
+      assert output ==
+               "Removed #{script.name} and its 2 schedules: morning-report, weekly-summary"
+    end
   end
 
   describe "secrets" do
@@ -425,6 +444,86 @@ defmodule YmerNode.Scripts.CLITest do
     end
   end
 
+  describe "schedules" do
+    test "list says there are none, naming the verb that adds one" do
+      assert {output, 0} = CLI.run(["schedules", "list"])
+      assert output =~ "No schedules. Add one with: ymer-node schedules add"
+    end
+
+    test "add answers the next firing and the end, and list shows the schedule" do
+      script = import!(segment())
+
+      assert {added, 0} =
+               CLI.run(["schedules", "add", "morning-report", script.name, "ping", "0 7 * * *"])
+
+      assert added =~ "Added morning-report: next firing "
+      assert added =~ ", ends "
+
+      assert {listed, 0} = CLI.run(["schedules", "list"])
+      assert listed =~ "active  morning-report  #{script.name} ping {}"
+      assert listed =~ "    0 7 * * *  next "
+      assert listed =~ "    no run yet"
+    end
+
+    test "add takes --args as a JSON object and --lifetime" do
+      script = import!(segment())
+
+      argv = [
+        "schedules",
+        "add",
+        "fetcher",
+        script.name,
+        "fetch",
+        "@daily",
+        "--args",
+        ~s({"url":"https://hex.pm"}),
+        "--lifetime",
+        "P30D"
+      ]
+
+      assert {_added, 0} = CLI.run(argv)
+      assert {listed, 0} = CLI.run(["schedules", "list"])
+      assert listed =~ ~s(fetch {"url":"https://hex.pm"})
+    end
+
+    test "a bad --args or an unknown option is a usage error" do
+      script = import!(segment())
+      add = ["schedules", "add", "fetcher", script.name, "fetch", "@daily"]
+
+      assert {output, 2} = CLI.run(add ++ ["--args", "[1]"])
+      assert output =~ "must be a JSON object"
+
+      assert {output, 2} = CLI.run(add ++ ["--every", "hour"])
+      assert output =~ "Unrecognised options"
+    end
+
+    test "forwards the node's refusal with status 1" do
+      script = import!(segment())
+
+      assert {output, 1} = CLI.run(["schedules", "add", "short", script.name, "ping", "* * *"])
+      assert output =~ "invalid_cron_expression"
+    end
+
+    test "update changes the cron expression, and remove deletes the schedule" do
+      script = import!(segment())
+
+      {_added, 0} =
+        CLI.run(["schedules", "add", "morning-report", script.name, "ping", "0 7 * * *"])
+
+      assert {updated, 0} =
+               CLI.run(["schedules", "update", "morning-report", "--cron", "30 8 * * *"])
+
+      assert updated =~ "Updated morning-report"
+
+      assert {listed, 0} = CLI.run(["schedules", "list"])
+      assert listed =~ "    30 8 * * *  next "
+
+      assert {"Removed morning-report", 0} = CLI.run(["schedules", "remove", "morning-report"])
+      assert {output, 1} = CLI.run(["schedules", "remove", "morning-report"])
+      assert output =~ "not_found"
+    end
+  end
+
   describe "usage" do
     test "help lists every verb, at status 0" do
       assert {output, 0} = CLI.run(["help"])
@@ -435,6 +534,8 @@ defmodule YmerNode.Scripts.CLITest do
             "scripts export",
             "secrets set",
             "scripts run",
+            "schedules list",
+            "schedules add",
             "throttles list",
             "throttles reset"
           ] do

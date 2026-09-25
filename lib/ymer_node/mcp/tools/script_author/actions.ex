@@ -65,7 +65,7 @@ defmodule YmerNode.Mcp.Tools.ScriptAuthor.Actions do
 
   defp remove(script) do
     case Scripts.remove(script) do
-      {:ok, removed} -> {:ok, %{removed: removed.name}, %{}}
+      {:ok, removed} -> {:ok, %{removed: removed.script.name, schedules: removed.schedules}, %{}}
       {:error, reason} -> {:error, {reason, %{action_verb: "remove a script"}}}
     end
   end

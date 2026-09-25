@@ -112,6 +112,25 @@ defmodule YmerNode.Mcp.Tools.ScriptAuthor.ActionsTest do
       assert Repo.aggregate(Scripts.Script, :count) == 0
     end
 
+    test "names the schedules that went with it" do
+      segment = segment()
+      purge_on_exit(segment)
+      assert {:ok, stored, _hint} = Actions.run(:create, %{"code" => code(segment)})
+
+      {:ok, _entry} =
+        YmerNode.Schedules.add(%{
+          name: "morning-report",
+          script: stored.name,
+          action: "ping",
+          cron_expression: "0 7 * * *"
+        })
+
+      assert {:ok, %{removed: name, schedules: ["morning-report"]}, %{}} =
+               Actions.run(:remove, %{"script" => stored.name})
+
+      assert name == stored.name
+    end
+
     test "refuses a script that is not there" do
       assert {:error, {{:not_found, _detail}, %{action_verb: "remove a script"}}} =
                Actions.run(:remove, %{"script" => "absent"})
