@@ -78,6 +78,7 @@ defmodule YmerNode.Scripts.CLI do
   alias YmerNode.Mcp.Tools.Helpers
   alias YmerNode.Schedules
   alias YmerNode.Scripts
+  alias YmerNode.Scripts.BrowserService
   alias YmerNode.Scripts.Throttle
   alias YmerNode.Secrets
 
@@ -132,6 +133,7 @@ defmodule YmerNode.Scripts.CLI do
   def run(["scripts", "describe", name], _stdin), do: describe(name, false)
   def run(["scripts", "describe", name, "--code"], _stdin), do: describe(name, true)
   def run(["scripts", "export", name], _stdin), do: export(name)
+  def run(["scripts", "browser"], _stdin), do: {render_browser(BrowserService.status()), 0}
   def run(["scripts", "import"], stdin), do: from_stdin(stdin, "the script", &import_code/1)
   def run(["scripts", "import", path], _stdin), do: import_file(path)
 
@@ -191,6 +193,34 @@ defmodule YmerNode.Scripts.CLI do
   defp state(%{accepted?: true, loaded?: true}), do: "ok    "
   defp state(%{accepted?: false}), do: "unacc "
   defp state(_broken), do: "BROKEN"
+
+  # What the node measured, a line each and never a verdict: status 0 whether or
+  # not anything answered, because the node refused nothing.
+  defp render_browser(%{answered: true, playwright: playwright} = status) do
+    Enum.join(
+      [
+        "browser service: #{status.url} — answered",
+        "  Playwright #{playwright}, #{browser_chromium(status)}",
+        "  storage states: #{browser_names(status.storage_states)}",
+        "  interactive windows: #{browser_names(status.windows)}"
+      ],
+      "\n"
+    )
+  end
+
+  defp render_browser(%{answered: true} = status),
+    do: "browser service: #{status.url} — answered, but gave no status\n  #{status.message}"
+
+  defp render_browser(status),
+    do: "browser service: #{status.url} — nothing answered\n  #{status.message}"
+
+  defp browser_chromium(%{chromium: nil, launch_error: error}),
+    do: "Chromium did not launch: #{error}"
+
+  defp browser_chromium(%{chromium: version}), do: "Chromium #{version}"
+
+  defp browser_names([]), do: "none"
+  defp browser_names(names), do: Enum.join(names, ", ")
 
   defp describe(name, code?) do
     case Scripts.describe(name, code: code?) do
@@ -489,6 +519,7 @@ defmodule YmerNode.Scripts.CLI do
       scripts list
       scripts describe <name> [--code]
       scripts export <name>       the code, exactly as the node holds it
+      scripts browser             whether a browser service answers, and what it holds
       scripts import              the file on stdin
       scripts import <file>       a path on the node's own filesystem
       scripts accept <name>

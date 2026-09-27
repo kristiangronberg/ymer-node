@@ -186,13 +186,25 @@ defmodule YmerNode.Scripts.GuideTest do
     test "names the files directory among the batteries and renders its accessor" do
       assert {:ok, text} = Guide.render()
 
-      assert text =~ "the node's time zone, the files directory and the"
-      assert text =~ "Typst renders — provided by the node rather than declared by the script."
+      assert text =~ "the node's time zone, the files directory, the Typst"
+
+      assert text =~
+               "renders and browser calls — provided by the node rather than declared by the script."
+
+      refute text =~ "the node's time zone, the files directory and the"
       refute text =~ "the node's time zone, the files directory — provided"
       assert text =~ "## Files\n"
       assert text =~ "### files_dir(context)"
       assert text =~ "The files directory — the one directory on this machine a script reads"
       assert text =~ "File.read!(Path.join(Context.files_dir(context), \"issues.xlsx\"))"
+    end
+
+    test "renders the Playwright section and the call it describes" do
+      assert {:ok, text} = Guide.render()
+
+      assert text =~ "## Playwright\n"
+      assert text =~ "### playwright(context, code, options \\\\ [])"
+      assert text =~ "`scripts browser` answers whether a browser service is"
     end
 
     @tag doc: """

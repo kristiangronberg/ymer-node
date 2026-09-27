@@ -33,6 +33,10 @@ defmodule YmerNode.ReleaseConfigTest do
   # the release's zone database does not know would make each of them raise.
   @time_zone_variable "TZ"
 
+  # Cleared before every case like TZ: a browser service variable the shell
+  # exports would otherwise answer every case's read.
+  @browser_service_variables ~w(BROWSER_SERVICE_URL BROWSER_SERVICE_TOKEN BROWSER_SERVICE_TOKEN_FILE)
+
   runtime_source = File.read!(@runtime_config)
   [_, marker] = Regex.run(~r/File\.exists\?\("([^"]+)"\)/, runtime_source)
   @marker marker
@@ -55,7 +59,7 @@ defmodule YmerNode.ReleaseConfigTest do
           @databases_variable,
           @files_variable,
           @retired_variable,
-          @time_zone_variable | @integer_variables
+          @time_zone_variable | @browser_service_variables ++ @integer_variables
         ],
         &{&1, System.get_env(&1)}
       )
@@ -77,6 +81,7 @@ defmodule YmerNode.ReleaseConfigTest do
 
     Enum.each(@integer_variables, &System.delete_env/1)
     System.delete_env(@time_zone_variable)
+    Enum.each(@browser_service_variables, &System.delete_env/1)
     System.put_env(@databases_variable, Path.join(tmp, "db"))
     System.put_env(@files_variable, Path.join(tmp, "files"))
     %{files_dir: Path.join(tmp, "files")}
@@ -98,6 +103,12 @@ defmodule YmerNode.ReleaseConfigTest do
     @runtime_config
     |> Config.Reader.read!(env: :prod)
     |> get_in([:ymer_node, YmerNode.Script.Context, :files_dir])
+  end
+
+  defp release_browser_service do
+    @runtime_config
+    |> Config.Reader.read!(env: :prod)
+    |> get_in([:ymer_node, YmerNode.Scripts.BrowserService])
   end
 
   describe "the bind marker" do
@@ -302,6 +313,38 @@ defmodule YmerNode.ReleaseConfigTest do
         System.put_env(@time_zone_variable, blank)
         assert release_time_zone() == nil
       end
+    end
+  end
+
+  describe "the browser service" do
+    @tag skip:
+           File.exists?(@marker) &&
+             "this machine carries the bind marker, so the host default cannot be read here"
+    test "unset or blank, a release on the host reaches the service on loopback, with its token file" do
+      host = [
+        url: "http://127.0.0.1:8013",
+        token: nil,
+        token_file: Path.expand("~/.ymer-node/browser-service-token")
+      ]
+
+      assert Keyword.equal?(release_browser_service(), host)
+
+      for blank <- ["", "  "] do
+        Enum.each(@browser_service_variables, &System.put_env(&1, blank))
+        assert Keyword.equal?(release_browser_service(), host)
+      end
+    end
+
+    test "each variable, set, is its value" do
+      System.put_env("BROWSER_SERVICE_URL", "http://10.0.0.5:8013")
+      System.put_env("BROWSER_SERVICE_TOKEN", "the-token")
+      System.put_env("BROWSER_SERVICE_TOKEN_FILE", "/app/data/browser-service-token")
+
+      assert Keyword.equal?(release_browser_service(),
+               url: "http://10.0.0.5:8013",
+               token: "the-token",
+               token_file: "/app/data/browser-service-token"
+             )
     end
   end
 end

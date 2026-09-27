@@ -1,0 +1,19 @@
+{
+  "name": "ymer-node-browser-service",
+  "private": true,
+  "description": "Runs Playwright code a Ymer Node script sends it, each browser call in a fresh browser context, and keeps the storage states",
+  "license": "Apache-2.0",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "postinstall": "playwright install chromium",
+    "start": "node src/main.js",
+    "window": "node src/window.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@playwright/test": "1.63.0"
+  }
+}

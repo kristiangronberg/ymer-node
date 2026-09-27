@@ -35,6 +35,10 @@ config :ymer_node, YmerNode.Notebook.Backup,
 # git (.gitignore).
 config :ymer_node, YmerNode.Script.Context, files_dir: Path.expand("../files_dev", __DIR__)
 
+# The browser service a dev node calls: the one `npm start` serves from this
+# checkout's browser-service/, on the host like the dev node itself.
+config :ymer_node, YmerNode.Scripts.BrowserService, url: "http://127.0.0.1:8013"
+
 config :ymer_node, YmerNode.Mcp, port: 4012
 
 config :logger, :default_formatter, format: "[$level] $message\n"

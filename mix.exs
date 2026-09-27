@@ -4,7 +4,7 @@ defmodule YmerNode.MixProject do
   def project do
     [
       app: :ymer_node,
-      version: "0.3.0",
+      version: "0.4.0",
       elixir: "~> 1.19",
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
@@ -149,7 +149,8 @@ defmodule YmerNode.MixProject do
         "credo --strict",
         "deps.audit",
         "docs --warnings-as-errors",
-        "test --warnings-as-errors"
+        "test --warnings-as-errors --raise",
+        "ymer_node.browser_check"
       ]
     ]
   end

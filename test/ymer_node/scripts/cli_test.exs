@@ -195,6 +195,52 @@ defmodule YmerNode.Scripts.CLITest do
     end
   end
 
+  describe "scripts browser" do
+    test "reports what the browser service holds, at status 0" do
+      Req.Test.stub(YmerNode.Script.Context, fn conn ->
+        Req.Test.json(conn, %{
+          "playwright" => "pinned",
+          "chromium" => "153.0.8010.12",
+          "launch_error" => nil,
+          "storage_states" => ["intranet", "lfb-stage"],
+          "windows" => ["intranet"]
+        })
+      end)
+
+      assert {output, 0} = CLI.run(["scripts", "browser"])
+      assert output =~ "browser service: http://127.0.0.1:8013 — answered"
+      assert output =~ "Playwright pinned, Chromium 153.0.8010.12"
+      assert output =~ "storage states: intranet, lfb-stage"
+      assert output =~ "interactive windows: intranet"
+    end
+
+    test "names the launch failure when the service could not start a browser" do
+      Req.Test.stub(YmerNode.Script.Context, fn conn ->
+        Req.Test.json(conn, %{
+          "playwright" => "pinned",
+          "chromium" => nil,
+          "launch_error" => "run npm install in browser-service/",
+          "storage_states" => [],
+          "windows" => []
+        })
+      end)
+
+      assert {output, 0} = CLI.run(["scripts", "browser"])
+      assert output =~ "Chromium did not launch: run npm install in browser-service/"
+      assert output =~ "storage states: none"
+    end
+
+    test "says nothing answered and what to run, at status 0" do
+      Req.Test.stub(YmerNode.Script.Context, fn conn ->
+        Req.Test.transport_error(conn, :econnrefused)
+      end)
+
+      assert {output, 0} = CLI.run(["scripts", "browser"])
+      assert output =~ "browser service: http://127.0.0.1:8013 — nothing answered"
+      assert output =~ "npm start"
+    end
+  end
+
   describe "scripts import" do
     @tag doc: """
          The file's bytes arrive on stdin, so
@@ -532,6 +578,7 @@ defmodule YmerNode.Scripts.CLITest do
             "scripts list",
             "scripts import",
             "scripts export",
+            "scripts browser",
             "secrets set",
             "scripts run",
             "schedules list",

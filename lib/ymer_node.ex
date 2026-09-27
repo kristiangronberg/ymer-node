@@ -45,6 +45,7 @@ defmodule YmerNode do
       BackupFiles[(backup files)]
       SecretsFile[(secrets.env)]
       FilesDir[(files directory)]
+      BrowserService(browser service)
 
       Mcp -->|"serves the notebook tool"| Notebook
       Mcp -->|"capture and restore"| Backup
@@ -59,6 +60,7 @@ defmodule YmerNode do
       Scripts -->|"a run's batteries"| Notebook
       Scripts --> SecretsFile
       Scripts -->|"a run reads and writes files"| FilesDir
+      Scripts -->|"a run's browser calls"| BrowserService
       Mcp -->|"serves the schedules tool"| Schedules
       Schedules -->|"runs an action at each firing"| Scripts
       Scripts -->|"the schedule holding a run in flight"| Schedules
@@ -160,7 +162,7 @@ defmodule YmerNode do
   `YmerNode.Script` is the contract a script implements and
   `YmerNode.Script.Context` the batteries it is handed — Req, the notebook,
   secrets, throttles, the node's time zone, the files directory, the Typst
-  renders — which is why a script needs no dependencies of its own.
+  renders and browser calls — which is why a script needs no dependencies of its own.
   `YmerNode.Scripts.Throttle` is the one battery that is a process: one per
   throttle name, shared by every script and run naming it, holding the bucket
   and the breaker the account behind the name needs. `YmerNode.Scripts.Guide`
@@ -179,6 +181,15 @@ defmodule YmerNode do
   secrets table would make one row of `node.db` precious and the rule would have
   to grow an exception, where a file leaves it intact and costs a re-set rather
   than a restore.
+
+  `YmerNode.Scripts.BrowserService` is the node's half of the browser service, a
+  program the user runs on their own machine that drives a real browser for a
+  script's browser calls. It owns where the service is, the token it sends
+  there, how long a call may wait and how a failure reads, and nothing of the
+  browser itself: the Chromium builds alone are hundreds of megabytes that most
+  nodes never use, and Playwright's releases would become the node's. So the
+  service stays outside the image, and a node without one still answers every
+  call — with a refusal naming what to run.
 
   `YmerNode.Scripts.CLI` is the operator's door, run on the machine itself —
   where importing a file from a repository and setting a secret that must never

@@ -113,6 +113,23 @@ defmodule YmerNode.Mcp.Tools.Scripts.Schemas do
           "`guide`, which is where the names come from.",
       related: ["guide"]
     },
+    browser: %{
+      description: "Whether a browser service answers, and what it holds",
+      properties: %{},
+      required: [],
+      defaults: %{},
+      notes:
+        "The call to make before writing a script that drives a browser through " <>
+          "`YmerNode.Script.Context.playwright/3`: the URL the node calls, whether " <>
+          "anything answered there, and — when the browser service did — its " <>
+          "Playwright version, the Chromium it launched, the storage state names and " <>
+          "the names an interactive window holds. When nothing answered, `message` " <>
+          "says what the person runs to start it; when the service refused the " <>
+          "request — one without its token, say — `message` is the service's own " <>
+          "text, which says where the token is. Facts measured at the call, and " <>
+          "nothing changes.",
+      related: ["guide"]
+    },
     run: %{
       description: "Run one of a script's actions",
       properties: %{"script" => @script, "action" => @action, "args" => @args},

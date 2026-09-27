@@ -1,8 +1,8 @@
 defmodule YmerNode.Script.Context do
   @moduledoc """
   What the node hands every run — Req, `JSON`, the notebook, secrets, the
-  throttles it declares, the node's time zone, the files directory and the
-  Typst renders — provided by the node rather than declared by the script.
+  throttles it declares, the node's time zone, the files directory, the Typst
+  renders and browser calls — provided by the node rather than declared by the script.
 
   A script's code carries logic, not plumbing. It never opens a connection pool,
   never reads a config file and never learns where the node keeps anything: it
@@ -99,8 +99,56 @@ defmodule YmerNode.Script.Context do
   not already crossed: it writes the notebook directly through the `notebook`
   tool. There is nothing here to declare, which is why `t:YmerNode.Script.declarations/0`
   has no notebook key.
+
+  ## Playwright
+
+  `playwright/3` drives a browser the way `request/2` reaches a system: the
+  script sends Playwright JavaScript to the browser service — a program the
+  user runs on their own machine, outside the node — and gets back what the
+  code returned. The code is a function, `async (page, args, expect) => …`:
+  `page` is a fresh page in a fresh browser context, `args` is the map the
+  script passed, and `expect` is Playwright Test's web-first assertion, which
+  retries until its condition holds, so a check does not fail on a page still
+  rendering. Only JSON comes back: return the text, numbers and booleans the
+  script needs, never a locator or an element — and a `Buffer`, which
+  `page.screenshot()` answers, arrives as its base64 text.
+
+  A secret reaches the code as data — in `args`, or as `httpCredentials` inside
+  `browser_context` for a site behind basic or Windows authentication — and is
+  never spliced into the code's text. A login that should outlast one call is a
+  storage state: `storage:` names it, `save_storage: true` saves it back when
+  the call succeeds, and a person logs in by hand in the browser service's
+  interactive window on the same name. The window owns the name while it is
+  open: a call that asks to save is `:storage`, and so is one a window opened
+  on the name while it ran, whose state is older than the window's. Two calls
+  saving under one name at once — two scripts, or a run by hand beside a
+  schedule — do not wait for each other, and the name holds whichever finished
+  last; scripts that may save at the same moment save under names of their own.
+
+  The call is bounded by the run's deadline, not by a number of its own: the
+  service gets what remains of it, so a longer flow raises its action's
+  `timeout` key. A failure is `{:error, %YmerNode.Scripts.BrowserService.Error{}}`
+  of one `kind` — `:code`, `:thrown` (a Playwright error or a failed `expect`),
+  `:storage`, `:value`, `:timeout`, `:unreachable` or `:protocol` — and on
+  `:thrown` and `:timeout` its `screenshot` holds a PNG of the page as it stood.
+  Before writing one, `scripts browser` answers whether a browser service is
+  there, its Playwright version, and the storage states it holds.
+
+  A check that a landing page still carries its heading:
+
+      code = ~S[
+        async (page, args, expect) => {
+          await page.goto(args.url);
+          const heading = page.locator('h1').first();
+          await expect(heading).toHaveText('a memory for you and your AI assistant');
+          return await heading.textContent();
+        }
+      ]
+
+      {:ok, %{value: heading}} = Context.playwright(context, code, args: %{url: "https://ymer.ax"})
   """
   alias YmerNode.Notebook
+  alias YmerNode.Scripts.BrowserService
   alias YmerNode.Scripts.Throttle
   alias YmerNode.Secrets
 
@@ -113,8 +161,8 @@ defmodule YmerNode.Script.Context do
 
   @typedoc """
   What the node hands every run — Req, `JSON`, the notebook, secrets, the
-  throttles it declares, the node's time zone, the files directory and the
-  Typst renders — provided by the node rather than declared by the script. The
+  throttles it declares, the node's time zone, the files directory, the Typst
+  renders and browser calls — provided by the node rather than declared by the script. The
   struct itself carries the script's own name, the action being run, the secret
   names its declarations allow it to resolve, the throttles they declare, and
   the run's deadline as the `System.monotonic_time(:millisecond)` instant it
@@ -309,6 +357,36 @@ defmodule YmerNode.Script.Context do
     |> Keyword.put(:root_dir, files_dir(context))
     |> Keyword.merge(options)
   end
+
+  @doc """
+  Makes one **browser call**: one request to the browser service, which runs
+  `code` — Playwright JavaScript of the shape `async (page, args, expect) => …`
+  — in a fresh browser context, optionally loading and saving a storage state,
+  bounded by what remains of this run's deadline. § Playwright above.
+
+  Options, every one optional:
+
+    * `args:` — a map handed to the code as its second argument, as JSON: how a
+      value reaches the code, a secret included, never by splicing it into the
+      text;
+    * `storage:` — the name of the storage state the context starts from;
+    * `save_storage: true` — save the context's state under that name when the
+      call succeeds, creating the name if it is new; it needs `storage:`, and
+      without one raises `ArgumentError` rather than send a call that saves
+      nothing;
+    * `browser_context:` — a map handed unchanged to Playwright's
+      `browser.newContext()`, in Playwright's own camelCase keys: `viewport`,
+      `locale`, `httpCredentials` and the rest;
+    * `screenshot: false` — take no PNG of the viewport on failure.
+
+  Answers `{:ok, %{value: value, url: url, title: title, duration_ms: ms}}` —
+  the code's returned value as decoded JSON, and the page it ended on — or
+  `{:error, %YmerNode.Scripts.BrowserService.Error{}}`, whose `kind` says which
+  of seven ways it failed.
+  """
+  def playwright(%__MODULE__{deadline: deadline}, code, options \\ [])
+      when is_binary(code) and is_list(options),
+      do: BrowserService.call(deadline, code, options)
 
   @doc """
   Resolves a declared secret by name.

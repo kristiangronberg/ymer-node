@@ -448,6 +448,33 @@ defmodule YmerNode.ScriptContextTest do
     end
   end
 
+  describe "playwright/3" do
+    test "makes a browser call bounded by the run's deadline, and answers its value" do
+      Req.Test.stub(Context, fn conn ->
+        {:ok, raw, conn} = Plug.Conn.read_body(conn)
+        assert %{"code" => "async (page) => 1", "bound_ms" => bound} = JSON.decode!(raw)
+        assert bound in 2_000..3_000
+
+        Req.Test.json(conn, %{
+          "ok" => true,
+          "value" => 1,
+          "url" => "about:blank",
+          "title" => "",
+          "duration_ms" => 3
+        })
+      end)
+
+      assert {:ok, %{value: 1}} = Context.playwright(context(), "async (page) => 1")
+    end
+
+    test "answers the browser service's error when it fails" do
+      Req.Test.stub(Context, fn conn -> Req.Test.transport_error(conn, :econnrefused) end)
+
+      assert {:error, %YmerNode.Scripts.BrowserService.Error{kind: :unreachable}} =
+               Context.playwright(context(), "async (page) => 1", args: %{})
+    end
+  end
+
   defp files_directory(_context) do
     saved = Application.get_env(:ymer_node, Context)
     directory = Path.join(System.tmp_dir!(), "ctx-render-#{System.unique_integer([:positive])}")

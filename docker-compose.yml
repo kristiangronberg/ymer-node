@@ -41,6 +41,16 @@ services:
       # name the node's zone database does not know refuses boot, and
       # `docker compose logs` shows TZ and the value.
       TZ: "${TZ:-}"
+      # Where the node's scripts reach the browser service, when the node cannot
+      # find it by itself: the image finds the host's service on macOS Docker, as
+      # host.docker.internal:8013, with nothing set. Set it in the install's .env,
+      # like TZ; unset or blank, the node uses that default.
+      BROWSER_SERVICE_URL: "${BROWSER_SERVICE_URL:-}"
+      # The browser service's token, which it refuses a request without: the
+      # contents of ~/.ymer-node/browser-service-token on the host, where
+      # `npm start` writes it. The container cannot read that file, so copy its
+      # contents into the install's .env; unset, the node sends no token.
+      BROWSER_SERVICE_TOKEN: "${BROWSER_SERVICE_TOKEN:-}"
     ports:
       # Bind the HOST side to loopback only. /mcp is UNAUTHENTICATED, and not
       # being reachable from the network is that decision's whole compensating

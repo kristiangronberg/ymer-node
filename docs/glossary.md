@@ -38,6 +38,14 @@ inside the container, and nothing else does.
 
 _Avoid_: bind flag, wide-bind switch, bind env (there is no variable)
 
+### browser call
+`YmerNode.Script.Context.playwright/3`
+_Avoid_: run (the Runner's word), session, execution
+
+### browser service
+`YmerNode.Scripts.BrowserService`
+_Avoid_: runner (the **run**'s word), Playwright server, browser runner, sidecar
+
 ## C
 
 ### CLI
@@ -133,6 +141,12 @@ smoke on its own port is not one — nothing there is kept.
 
 _Avoid_: install dir (as a term of its own — the install's directory is the
 install), the directory you keep, runner compose, prod (as a noun for it)
+
+### interactive window
+A headed Chromium the browser service opens on a storage state for a person,
+which owns that state's name while open and writes it back on a timer and on
+close.
+_Avoid_: headed browser, profile window, workbench, session
 
 ## L
 
@@ -303,6 +317,12 @@ source
 `t:YmerNode.References.Sources.declaration/0`
 Derived from an accepted script's *declaration*, which is the wider term.
 _Avoid_: source config, host mapping, URL pattern
+
+### storage state
+A browser session — cookies and localStorage per origin, Playwright's
+`storageState` — that the browser service keeps by name for browser calls and
+interactive windows to load and save; never a **secret**.
+_Avoid_: named storage state, profile, session file, cookie jar, credential
 
 ### store
 

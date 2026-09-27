@@ -170,9 +170,27 @@ if config_env() == :prod do
   # that image finds no marker and binds loopback, and nothing set at `docker run`
   # time can widen it. The rule and what it costs live in `YmerNode.Mcp`'s
   # "Loopback is the security model" section.
-  if File.exists?("/etc/ymer-node/bind-all-interfaces") do
+  bind_marker? = File.exists?("/etc/ymer-node/bind-all-interfaces")
+
+  if bind_marker? do
     config :ymer_node, YmerNode.Mcp, ip: {0, 0, 0, 0}
   end
+
+  # Where the browser service is, and its token, answered by
+  # `YmerNode.Scripts.BrowserService` (§ Where the service is, § The token).
+  # Each variable wins when set. Without them the bind marker decides again: a
+  # node in its own image reaches the host's loopback-bound service through
+  # host.docker.internal, which macOS Docker provides, and cannot read the
+  # host's token file, so it reads none; a release run on the host reaches the
+  # service directly and reads the file the service writes.
+  config :ymer_node, YmerNode.Scripts.BrowserService,
+    url:
+      env.("BROWSER_SERVICE_URL") ||
+        if(bind_marker?, do: "http://host.docker.internal:8013", else: "http://127.0.0.1:8013"),
+    token: env.("BROWSER_SERVICE_TOKEN"),
+    token_file:
+      env.("BROWSER_SERVICE_TOKEN_FILE") ||
+        if(bind_marker?, do: nil, else: Path.expand("~/.ymer-node/browser-service-token"))
 
   # The node's wire identity, and the reason a deploy can prove a container
   # is running the code it just built. The image stamps the revision it was

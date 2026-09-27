@@ -20,3 +20,6 @@ CLAUDE.local.md
 /files_dev/*
 !/files_dev/.gitkeep
 /ymer_node_test*_files/
+
+# The browser service's installed packages; package-lock.json is tracked.
+/browser-service/node_modules/

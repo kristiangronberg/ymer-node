@@ -30,11 +30,13 @@ defmodule YmerNode.Mcp.Tools.Scripts.Actions do
   alias YmerNode.Mcp.Tools.Helpers
   alias YmerNode.Mcp.Tools.ScriptFormat
   alias YmerNode.Scripts
+  alias YmerNode.Scripts.BrowserService
   alias YmerNode.Scripts.Guide
   alias YmerNode.Scripts.PackageDocs
 
   def run(:list, data) when is_map(data), do: list()
   def run(:guide, data) when is_map(data), do: guide()
+  def run(:browser, data) when is_map(data), do: {:ok, BrowserService.status(), %{}}
   def run(:info, %{"name" => name}) when is_binary(name), do: info(name)
 
   def run(:describe, %{"script" => script} = data) when is_binary(script),

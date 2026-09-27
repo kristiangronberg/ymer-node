@@ -90,6 +90,32 @@ defmodule YmerNode.Mcp.Tools.Scripts.ActionsTest do
     end
   end
 
+  describe "browser" do
+    test "reports what the browser service answered, with nothing to steer at" do
+      Req.Test.stub(YmerNode.Script.Context, fn conn ->
+        Req.Test.json(conn, %{
+          "playwright" => "pinned",
+          "chromium" => "153.0.8010.12",
+          "launch_error" => nil,
+          "storage_states" => [],
+          "windows" => []
+        })
+      end)
+
+      assert {:ok, %{answered: true, playwright: "pinned", url: "http://127.0.0.1:8013"}, %{}} =
+               Actions.run(:browser, %{})
+    end
+
+    test "reports that nothing answered, and what to run" do
+      Req.Test.stub(YmerNode.Script.Context, fn conn ->
+        Req.Test.transport_error(conn, :econnrefused)
+      end)
+
+      assert {:ok, %{answered: false, message: message}, %{}} = Actions.run(:browser, %{})
+      assert message =~ "npm start"
+    end
+  end
+
   describe "info" do
     test "answers a promised package's own docs under its name, with nothing to steer at" do
       assert {:ok, %{name: "saxy", docs: text}, %{}} = Actions.run(:info, %{"name" => "saxy"})

@@ -74,8 +74,7 @@ by the first rung that fits.
 
 What script authors on comparable platforms reach for — the classes are
 those of Google Apps Script's services, n8n's core nodes and Huginn's
-agents — and where each lands here. *Planned* marks a battery the node
-intends and has not released.
+agents — and where each lands here.
 
 | Class | Needs | Where it comes from |
 | --- | --- | --- |
@@ -93,7 +92,7 @@ intends and has not released.
 | Email, read | IMAP | a service: Graph or Gmail over HTTP |
 | SSH, SFTP transfer | `:ssh` | one release line when a use case arrives |
 | PDF | typst | the release |
-| Web UI test automation | Playwright | planned; the browser itself is a service |
+| Web UI test automation | Playwright | a service: the browser service, reached through `YmerNode.Script.Context.playwright/3` — set up as the README's *The browser service* says |
 | Images, charts | vix, image | a service or an image of your own; SVG through `EEx` needs nothing |
 | Crypto, JWT, TOTP | `:crypto`, `:public_key`; jose | the release; TOTP is a library; JWT a battery when an assertion flow needs it |
 | Scheduling | a schedule, `YmerNode.Schedules` | a node feature, not a battery |

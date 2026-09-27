@@ -9,8 +9,15 @@ defmodule YmerNode.Mcp.Tools.Scripts.SchemasTest do
   alias YmerNode.Mcp.Tools.Scripts.Schemas
   alias YmerNode.Scripts.PackageDocs
 
-  test "serves exactly list, describe, guide, info and run" do
-    assert Schemas.all() |> Map.keys() |> Enum.sort() == [:describe, :guide, :info, :list, :run]
+  test "serves exactly list, describe, guide, info, browser and run" do
+    assert Schemas.all() |> Map.keys() |> Enum.sort() ==
+             [:browser, :describe, :guide, :info, :list, :run]
+  end
+
+  test "browser takes nothing and points at the call it serves" do
+    assert Schemas.all().browser.required == []
+    assert Schemas.all().browser.properties == %{}
+    assert Schemas.all().browser.notes =~ "`YmerNode.Script.Context.playwright/3`"
   end
 
   test "info takes a promised package's name and nothing else" do

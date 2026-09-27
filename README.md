@@ -184,7 +184,7 @@ less the list of applications the guide ends with, which the node computes —
 is the `YmerNode.Script` and `YmerNode.Script.Context` pages of the docs, which
 `mix docs` builds here. Keep `script_author` set to ask, as *Running it* says:
 what it creates, the node runs. What a script can reach beyond that contract
-— the standard library, a library, a service, the batteries the node plans —
+— the standard library, a library, a service such as the browser service —
 and the test that decides when the node itself grows are mapped in
 [Scripts — batteries and their boundary](docs/scripts.md).
 
@@ -230,6 +230,68 @@ is that node's own — and whoever runs that machine sets the secrets it
 declares. The example script the image ships, `hex`, is already there on a
 fresh install, to be read as much as run; remove it and it stays gone.
 
+## The browser service
+
+A script drives a browser through the browser service: a small Node program in
+`browser-service/` that runs on your own machine, outside the node, and runs
+the Playwright code a script sends it — each call in a fresh browser context.
+The browser, Playwright and Node.js stay out of the node's image, since most
+nodes never use them, so the service is yours to start; a node without one
+runs every other script as before, and a browser call refuses with what to
+run.
+
+It needs Node.js 20 or later. First-time setup, in a clone of this repository:
+
+```sh
+cd browser-service
+npm install    # the pinned Playwright, and the Chromium builds it drives
+npm start
+```
+
+`npm start` serves on `127.0.0.1:8013`, and refuses to start — naming the fix —
+when the browser build is missing or the port is taken; `BROWSER_SERVICE_PORT`
+moves it. A node run on the host finds it there with nothing to configure, and
+so does the node's image on macOS Docker, through `host.docker.internal`.
+Anywhere else, set `BROWSER_SERVICE_URL` — in the install's `.env`, like `TZ`
+— to the address the node reaches the service at. Linux Docker is not
+promised: the default address does not reach a service bound to the host's
+loopback there. `scripts browser`, from a session or as an operator's verb,
+says whether anything answered and what the service holds.
+
+A login a script should reuse is a **storage state** — the browser's cookies
+and local storage, kept by name. To make one by hand, or to refresh it, open an
+interactive window on its name while the service runs:
+
+```sh
+npm run window -- intranet
+```
+
+Log in, work as long as you like, and close the window: the state is written
+every minute while it is open and again when it closes, and a scheduled script
+reading that name is logged in too. While the window is open a script may read
+the state but not save over it. The states are files in
+`~/.ymer-node/storage-states/` — `BROWSER_SERVICE_STORAGE_DIR` moves it — the
+directory `0700` and each file `0600`, and the service refuses to read one
+anyone else can, naming the `chmod`. They hold live logins, so they belong in
+no git tree and never pass through the node.
+
+The service binds loopback, like the node, and refuses any request shaped like
+one from a web page: an `Origin` header, a body that is not JSON, or a `Host`
+that is not this machine. Loopback does not keep other programs out — every
+container on a Docker host reaches the service the way the node's image does —
+and a browser call's code runs with your privileges, so every request must also
+carry the service's token. The token is a random value in
+`~/.ymer-node/browser-service-token`, `0600`, which `npm start` writes the first
+time; `BROWSER_SERVICE_TOKEN_FILE` moves it, for the service and for a node run
+on the host alike, and such a node reads it with nothing to configure. A node in
+Docker cannot read that file: copy its contents into the install's `.env` as
+`BROWSER_SERVICE_TOKEN`. A request without the token is refused with where to
+find it.
+
+Upgrading Playwright is a commit that moves its pin in
+`browser-service/package.json`; the next `npm install` fetches the browser
+build the new version drives.
+
 ## Developing it
 
 ```sh
@@ -239,7 +301,9 @@ mise exec -- mix precommit
 ```
 
 `precommit` is the gate: compile with warnings as errors, format, Credo, a
-dependency audit, and the test suite.
+dependency audit, the test suite, and `mix ymer_node.browser_check` — the
+browser service's own tests, which need Node.js 20 or later and install the
+service's packages and browser builds on their first run.
 
 `mix ymer_node.consumer_check` runs apart from it: it builds a project that
 depends on this checkout under `runtime: false` and runs that project's tests,

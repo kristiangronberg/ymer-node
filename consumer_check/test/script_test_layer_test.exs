@@ -38,4 +38,19 @@ defmodule ConsumerCheck.ScriptTestLayerTest do
   test "the zone database this project's configuration names is the one in use" do
     assert {:ok, _instant} = DateTime.shift_zone(~U[2026-09-20 10:00:00Z], "Europe/Helsinki")
   end
+
+  test "a browser call runs through the stub" do
+    Req.Test.stub(Context, fn conn ->
+      Req.Test.json(conn, %{
+        "ok" => true,
+        "value" => "a memory for you and your AI assistant",
+        "url" => "https://ymer.ax/",
+        "title" => "Ymer",
+        "duration_ms" => 12
+      })
+    end)
+
+    assert {:ok, %{value: "a memory for you and your AI assistant"}} =
+             Context.playwright(ScriptTest.context(), "async (page) => 1")
+  end
 end

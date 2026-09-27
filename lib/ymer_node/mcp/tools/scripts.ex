@@ -40,7 +40,9 @@ defmodule YmerNode.Mcp.Tools.Scripts do
         "describe gives one script's actions with their arguments and their " <>
         "write marks; run executes one; guide renders the contract and the " <>
         "batteries, for writing one; info renders a promised package's own docs " <>
-        "from this release, for the first script that uses it. Read describe " <>
+        "from this release, for the first script that uses it; browser says " <>
+        "whether a browser service answers, for a script that drives a browser. " <>
+        "Read describe " <>
         "before you run: a run can reach the network and change things outside " <>
         "this machine, and it is killed rather than waited on past its deadline. " <>
         "Only a script accepted at exactly the code it holds will run."
