@@ -1,7 +1,8 @@
 defmodule YmerNode.References.Reference do
   @moduledoc """
   One row of the registry: a pointer naming where knowledge lives and when to
-  look, never what it says. The rule that keeps it a pointer — the membrane —
+  look, never what it says — that is its cache entry's
+  (`YmerNode.References.CacheEntry`). The rule between the two — the membrane —
   is stated in `YmerNode.References`.
 
   Shape decisions:

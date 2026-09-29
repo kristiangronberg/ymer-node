@@ -2,7 +2,7 @@ defmodule YmerNode.ReferencesTest do
   use YmerNode.DataCase
 
   alias YmerNode.References
-  alias YmerNode.References.Reference
+  alias YmerNode.References.{Cache, CacheEntry, Reference}
 
   doctest YmerNode.References
 
@@ -14,6 +14,26 @@ defmodule YmerNode.ReferencesTest do
 
     {:ok, reference} = References.create_reference(Map.merge(defaults, attrs))
     reference
+  end
+
+  defp cached!(reference, content \\ [body: "# Page\n"]) do
+    now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+    attrs =
+      Map.merge(
+        %{
+          reference_id: reference.id,
+          uri: reference.uri,
+          script: "webpage",
+          format: "text/markdown",
+          size_bytes: 7,
+          fetched_at: now,
+          checked_at: now
+        },
+        Map.new(content)
+      )
+
+    %CacheEntry{} |> CacheEntry.changeset(attrs) |> Repo.insert!()
   end
 
   describe "create_reference/1" do
@@ -103,6 +123,30 @@ defmodule YmerNode.ReferencesTest do
 
       assert {:error, :not_found} = References.update_reference(reference, %{title: "new title"})
     end
+
+    @tag doc: """
+         A cache entry is what the reference's target said; moving the uri or
+         the fragment names another target. A failure means the old page is
+         served, under a fresh stamp, for a reference that no longer names it.
+         """
+    test "drops the cache entry when the uri or the fragment moves, and keeps it otherwise" do
+      reference = reference!(%{})
+      cached!(reference)
+
+      assert {:ok, retitled} = References.update_reference(reference, %{title: "retitled"})
+      assert Repo.aggregate(CacheEntry, :count) == 1
+
+      assert {:ok, _moved} =
+               References.update_reference(retitled, %{uri: "https://example.com/moved"})
+
+      assert Repo.aggregate(CacheEntry, :count) == 0
+
+      reference = reference!(%{})
+      cached!(reference)
+
+      assert {:ok, _moved} = References.update_reference(reference, %{fragment: "Intro"})
+      assert Repo.aggregate(CacheEntry, :count) == 0
+    end
   end
 
   describe "delete_reference/1" do
@@ -112,6 +156,18 @@ defmodule YmerNode.ReferencesTest do
       assert {:ok, %Reference{}} = References.delete_reference(reference)
       assert {:error, :not_found} = References.get_reference(reference.id)
       assert {:error, :not_found} = References.delete_reference(reference)
+    end
+
+    test "takes the cache entry and its file with it" do
+      reference = reference!(%{})
+      File.mkdir_p!(Cache.dir())
+      file = Path.join(Cache.dir(), "#{reference.id}.png")
+      File.write!(file, "x")
+      cached!(reference, path: "#{reference.id}.png")
+
+      assert {:ok, %Reference{}} = References.delete_reference(reference)
+      assert Repo.aggregate(CacheEntry, :count) == 0
+      refute File.exists?(file)
     end
   end
 

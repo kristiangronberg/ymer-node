@@ -37,6 +37,7 @@ defmodule YmerNode.Mcp.Tools.ScriptAuthor.ErrorsTest do
     :module_mismatch,
     :reserved_name,
     :host_claimed,
+    :fallback_claimed,
     :throttle_conflict,
     :run_in_flight,
     :commit_failed
@@ -61,6 +62,15 @@ defmodule YmerNode.Mcp.Tools.ScriptAuthor.ErrorsTest do
     message = Errors.format({:host_claimed, "hex.pm is already claimed by hex"})
 
     assert message =~ "resolve the same way every time"
+  end
+
+  test "a claimed web fallback explains the one-fallback rule" do
+    message =
+      Errors.format(
+        {:fallback_claimed, "the accepted script webpage is already the web fallback"}
+      )
+
+    assert message =~ "resolves the same way every time"
   end
 
   test "a throttle conflict says why one name takes one set of parameters" do

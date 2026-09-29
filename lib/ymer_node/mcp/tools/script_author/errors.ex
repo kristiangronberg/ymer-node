@@ -43,6 +43,12 @@ defmodule YmerNode.Mcp.Tools.ScriptAuthor.Errors do
       "#{detail}. One host is claimed by one script, so that references resolve " <>
         "the same way every time. Remove the other script's claim, or drop this one."
 
+  def message({:fallback_claimed, detail}, _ctx),
+    do:
+      "#{detail}. One script serves the web pages no host claim takes, so that a " <>
+        "page resolves the same way every time. Drop this script's web_fallback, " <>
+        "or remove the other's."
+
   def message({:throttle_conflict, detail}, _ctx),
     do:
       "#{detail}. A throttle is one process per name, shared by every script declaring it, " <>

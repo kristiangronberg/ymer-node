@@ -81,7 +81,9 @@ defmodule Script.HexTest do
                hosts: ["hex.pm"],
                url_action: :fetch,
                secrets: [],
-               throttles: %{}
+               throttles: %{},
+               cache: :text,
+               web_fallback: false
              }
 
       assert Map.has_key?(compiled.actions.fetch.properties, "url")
@@ -165,14 +167,54 @@ defmodule Script.HexTest do
         Req.Test.json(conn, @body)
       end)
 
-      assert {:ok, %{"name" => "req"}} =
+      assert {:ok, %{"content" => "# req\n" <> _rest, "format" => "text/markdown"}} =
                module.run(:fetch, %{"url" => "https://hex.pm/packages/req"}, context())
+    end
+
+    @tag doc: """
+         The URL action answers the cache's contract — a page under `content`
+         with its `format` — because the node stores what it answers and serves
+         it through `references read`. A failure means the summary map came
+         back instead, which the node refuses as a script that predates the
+         contract, and every hex.pm reference stops being readable.
+         """
+    test "answers the package as a markdown page for the cache", %{module: module} do
+      Req.Test.stub(Context, fn conn -> Req.Test.json(conn, @body) end)
+
+      assert {:ok, answer} =
+               module.run(:fetch, %{"url" => "https://hex.pm/packages/req"}, context(:fetch))
+
+      assert answer == %{
+               "format" => "text/markdown",
+               "content" => """
+               # req
+
+               Req is a batteries-included HTTP client for Elixir.
+
+               - Latest version: 0.7.4
+               - Licenses: Apache-2.0
+               - All-time downloads: 42000000
+               - On hex.pm: https://hex.pm/packages/req
+               - GitHub: https://github.com/wojtekmach/req
+               """
+             }
+    end
+
+    test "refuses an answer that is not a package, keeping no page of blanks", %{
+      module: module
+    } do
+      Req.Test.stub(Context, fn conn -> Plug.Conn.send_resp(conn, 200, "<html>busy</html>") end)
+
+      assert {:error, message} =
+               module.run(:fetch, %{"url" => "https://hex.pm/packages/req"}, context(:fetch))
+
+      assert message =~ "not a package"
     end
 
     test "reads it out of an API url too", %{module: module} do
       Req.Test.stub(Context, fn conn -> Req.Test.json(conn, @body) end)
 
-      assert {:ok, %{"name" => "req"}} =
+      assert {:ok, %{"content" => "# req\n" <> _rest}} =
                module.run(:fetch, %{"url" => "https://hex.pm/api/packages/req"}, context(:fetch))
     end
 
@@ -205,7 +247,7 @@ defmodule Script.HexTest do
 
       assert message =~ "not a hex.pm package url"
 
-      assert {:ok, %{"name" => "req"}} =
+      assert {:ok, %{"content" => "# req\n" <> _rest}} =
                module.run(:fetch, %{"url" => "https://HEX.PM/packages/req"}, context(:fetch))
     end
   end

@@ -190,6 +190,58 @@ defmodule YmerNode.References.SourcesTest do
     end
   end
 
+  describe "the web fallback" do
+    @fallback %{name: "webpage", hosts: [], action: "fetch", cache: "text", web_fallback: true}
+
+    test "serves an unclaimed http(s) host under the web source, with a recipe" do
+      uri = "https://elixir-lang.org/docs"
+
+      assert %{source: "web", recipe: recipe} = classify(uri, [@fallback | @declarations])
+
+      assert recipe.params == %{
+               "script" => "webpage",
+               "action" => "fetch",
+               "args" => %{"url" => uri}
+             }
+    end
+
+    test "leaves an exact host claim to its claimant" do
+      assert %{source: "tracker"} =
+               classify("https://tracker.example.fi/browse/ABC-1", [@fallback | @declarations])
+    end
+
+    test "fetches nothing that is not an http(s) page with a host" do
+      assert %{source: "file", recipe: nil} = classify("/Users/k/notes.md", [@fallback])
+      assert %{source: "other", recipe: nil} = classify("mailto:someone@example.fi", [@fallback])
+      assert %{source: "web", recipe: nil} = classify("https:notes", [@fallback])
+    end
+
+    test "a fallback row declares with no hosts, and adds no source to the vocabulary" do
+      insert_script!("webpage", %{
+        "hosts" => [],
+        "url_action" => "fetch",
+        "secrets" => [],
+        "cache" => "text",
+        "web_fallback" => true
+      })
+
+      assert [%{name: "webpage", hosts: [], cache: "text", web_fallback: true}] =
+               Sources.declarations()
+
+      assert Sources.vocabulary() == ["file", "other", "web"]
+    end
+
+    test "a row written before the two keys existed declares text storage and no fallback" do
+      insert_script!("tracker", %{
+        "hosts" => ["tracker.example.fi"],
+        "url_action" => "issue",
+        "secrets" => []
+      })
+
+      assert [%{name: "tracker", cache: "text", web_fallback: false}] = Sources.declarations()
+    end
+  end
+
   describe "vocabulary/1" do
     test "answers a sorted vocabulary for the declarations it is handed, reading nothing" do
       assert Sources.vocabulary([@tracker, @wiki]) == ["file", "other", "tracker", "web", "wiki"]

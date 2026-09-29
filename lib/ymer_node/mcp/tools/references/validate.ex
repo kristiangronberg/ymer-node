@@ -87,4 +87,37 @@ defmodule YmerNode.Mcp.Tools.References.Validate do
   end
 
   def limit(_limit), do: {:error, :invalid_limit}
+
+  @doc """
+  The line a `read` window starts at, from 1 — 1 when absent. A positive
+  numeric string is taken, as `limit/1` takes one.
+  """
+  def offset(offset), do: positive(offset, 1, :invalid_offset)
+
+  @doc "How many lines a `read` window holds at most — as many as fit when absent."
+  def lines(lines), do: positive(lines, nil, :invalid_lines)
+
+  @doc "The character of a cut line a `read` window goes on from, from 1 — 1 when absent."
+  def column(column), do: positive(column, 1, :invalid_column)
+
+  @doc """
+  A watch's cadence and lifetime as integers. Only their type is judged here:
+  which values a watch takes is `YmerNode.Schedules.watch/3`'s to refuse, by
+  name.
+  """
+  def cadence(minutes), do: positive(minutes, :missing, :invalid_cadence)
+  def hours(hours), do: positive(hours, :missing, :invalid_hours)
+
+  defp positive(nil, :missing, reason), do: {:error, reason}
+  defp positive(nil, default, _reason), do: {:ok, default}
+  defp positive(n, _default, _reason) when is_integer(n) and n > 0, do: {:ok, n}
+
+  defp positive(s, _default, reason) when is_binary(s) do
+    case Integer.parse(String.trim(s)) do
+      {n, ""} when n > 0 -> {:ok, n}
+      _not_a_positive_integer -> {:error, reason}
+    end
+  end
+
+  defp positive(_value, _default, reason), do: {:error, reason}
 end

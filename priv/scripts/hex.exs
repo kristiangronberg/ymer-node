@@ -16,6 +16,11 @@ defmodule Script.Hex do
   such action, and its schema must declare a `url` property — the node refuses
   the script otherwise.
 
+  `fetch` answers what the node's cache stores: the package as a markdown page
+  under `content`, with its `format`. That page is what `references read`
+  serves for a hex.pm reference, so it is the same summary `package` answers,
+  laid out for a reader rather than for a program.
+
   Both are `write: false`. Nothing here changes anything, on hex.pm or here, and
   a worker reading the mark can act without asking.
 
@@ -25,7 +30,8 @@ defmodule Script.Hex do
   example — an example that needed a secret would teach the secret machinery
   instead of the contract. No retry: the node's `Req` options already turn Req's
   own retrying off, because a run has a deadline and a retry inside it spends
-  that deadline without telling anyone.
+  that deadline without telling anyone. No change check: the answer is small,
+  so a refresh fetches it whole; the `webpage` example shows the check.
   """
   use YmerNode.Script
 
@@ -80,8 +86,11 @@ defmodule Script.Hex do
 
   def run(:fetch, %{"url" => url}, context) do
     case package_name(url) do
-      {:ok, name} -> run(:package, %{"name" => name}, context)
-      :error -> {:error, "not a hex.pm package url: #{url}"}
+      {:ok, name} ->
+        with {:ok, summary} <- run(:package, %{"name" => name}, context), do: page(summary)
+
+      :error ->
+        {:error, "not a hex.pm package url: #{url}"}
     end
   end
 
@@ -138,4 +147,28 @@ defmodule Script.Hex do
   end
 
   defp summarise(body), do: %{"body" => body}
+
+  # The summary as a page a reader takes in at a glance: the name, what the
+  # package is, then one line per fact and per link. An answer that was not a
+  # package — a busy page served with a 200 — is refused rather than kept as a
+  # page of blanks over the last good one.
+  defp page(%{"body" => _unparsed}), do: {:error, "hex.pm answered something not a package"}
+
+  defp page(summary) do
+    links = for {label, href} <- summary["links"] || %{}, do: "- #{label}: #{href}"
+
+    lines = [
+      "# #{summary["name"]}",
+      "",
+      summary["description"] || "",
+      "",
+      "- Latest version: #{summary["latest_version"]}",
+      "- Licenses: #{Enum.join(summary["licenses"] || [], ", ")}",
+      "- All-time downloads: #{get_in(summary, ["downloads", "all"])}",
+      "- On hex.pm: #{summary["html_url"]}"
+      | links
+    ]
+
+    {:ok, %{"content" => Enum.join(lines, "\n") <> "\n", "format" => "text/markdown"}}
+  end
 end

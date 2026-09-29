@@ -20,8 +20,8 @@ defmodule YmerNode.Application do
   # The process registry and the task supervisor belong to the runner — one
   # records which scripts have a run in flight, the other owns the run
   # processes — and the task supervisor is also what the compiler bounds every
-  # compile with. Both come up before the migrator, because the migration that
-  # plants the example script compiles it, and a compile with no supervisor to
+  # compile with. Both come up before the migrator, because each migration that
+  # plants an example script compiles it, and a compile with no supervisor to
   # run under would end that boot in a `:noproc` exit.
   #
   # The throttles' process registry and supervisor come up beside them, before
@@ -32,6 +32,11 @@ defmodule YmerNode.Application do
   # because the loader reads it: a refusal to replace a script while a firing's
   # run of it is in flight names the schedule, and the refusal that holds is
   # taken inside the loader's own message.
+  #
+  # The cache's reconcile runs straight after the migrator: it reads the cache
+  # entries the migrator built, and it has to be done before anything can fill
+  # an entry — the loader, the scheduler and every call — so a boot never
+  # removes a file some run is writing.
   #
   # The scheduler comes up after the loader and after the notebook's own
   # children, just ahead of the listener, with its firing supervisor ahead of
@@ -59,6 +64,7 @@ defmodule YmerNode.Application do
       {DynamicSupervisor, name: YmerNode.Scripts.ThrottleSupervisor, strategy: :one_for_one},
       {Registry, keys: :unique, name: YmerNode.Schedules.InFlight},
       migrator(),
+      YmerNode.References.Cache.Reconcile,
       YmerNode.Scripts.Loader,
       YmerNode.Notebook.Repo,
       YmerNode.Notebook.VecLoadCheck,

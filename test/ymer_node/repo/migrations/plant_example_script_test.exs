@@ -77,7 +77,7 @@ defmodule YmerNode.Repo.Migrations.PlantExampleScriptTest do
 
       assert %Script{origin: "shipped"} = planted = Repo.get_by(Script, name: "hex")
       assert Script.accepted?(planted)
-      assert planted.code == File.read!(Scripts.example_path())
+      assert planted.code == File.read!(Scripts.example_path("hex.exs"))
     end
 
     test "plants nothing where the configuration turns the planting off" do
@@ -119,11 +119,26 @@ defmodule YmerNode.Repo.Migrations.PlantExampleScriptTest do
       assert Repo.get_by(Script, name: "hex") == nil
       assert Repo.get!(Script, kept.id).origin == "authored"
     end
+
+    @tag doc: """
+         Every example script has a migration of its own, so each `down` takes
+         its own row. A failure means rolling this version back also unplants
+         another example script a later migration planted.
+         """
+    test "leaves another shipped script in place" do
+      other = accepted_row!([], "shipped")
+      assert :ok = Ecto.Migrator.up(Repo, @version, PlantExampleScript, log: false)
+
+      assert :ok = Ecto.Migrator.down(Repo, @version, PlantExampleScript, log: false)
+
+      assert Repo.get_by(Script, name: "hex") == nil
+      assert Repo.get!(Script, other.id).origin == "shipped"
+    end
   end
 
   # An accepted row as the references seam reads it — no compile, no loader:
   # the host rule reads rows, and rows are all the migration's door meets.
-  defp accepted_row!(hosts) do
+  defp accepted_row!(hosts, origin \\ "authored") do
     name = "claimant#{System.unique_integer([:positive])}"
     code = "defmodule Script.Absent do\nend\n"
     hash = Script.hash(code)
@@ -136,7 +151,7 @@ defmodule YmerNode.Repo.Migrations.PlantExampleScriptTest do
           code_hash: hash,
           accepted_hash: hash,
           accepted_at: DateTime.utc_now() |> DateTime.truncate(:second),
-          origin: "authored",
+          origin: origin,
           contract: YmerNode.Script.contract(),
           description: name,
           declarations: %{"hosts" => hosts, "url_action" => "fetch", "secrets" => []}

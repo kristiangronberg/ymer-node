@@ -55,6 +55,51 @@ defmodule YmerNode.Mcp.Tools.References.Format do
 
   def find_hit(%{score: score} = hit), do: hit |> classified() |> Map.put(:score, score)
 
+  @doc """
+  What `read` answers for one reference: the entry's stamps and size, and what
+  was served — a window of text, an image under `image` for the tool's own
+  `run/2` clause to lift out as image content, or a description with the path
+  relative to the cache directory. `fetched` says whether this read ran the
+  script.
+  """
+  def read(%Reference{} = reference, %{entry: entry, fetched: fetched?, served: served}) do
+    reference
+    |> stamps(entry)
+    |> Map.put(:fetched, fetched?)
+    |> Map.merge(served(served, entry))
+    |> Helpers.compact()
+  end
+
+  @doc "What `refresh` answers: the outcome, and the entry's stamps and size."
+  def refreshed(%Reference{} = reference, %{outcome: outcome, entry: entry}) do
+    reference |> stamps(entry) |> Map.put(:outcome, outcome) |> Helpers.compact()
+  end
+
+  defp stamps(reference, entry) do
+    %{
+      reference: reference.id,
+      format: entry.format,
+      size_bytes: entry.size_bytes,
+      fetched_at: format_datetime(entry.fetched_at),
+      checked_at: format_datetime(entry.checked_at)
+    }
+  end
+
+  defp served({:text, window}, _entry) do
+    %{
+      text: window.text,
+      offset: window.offset,
+      lines: window.lines,
+      total_lines: window.total_lines,
+      next: window.next
+    }
+  end
+
+  defp served({:image, data, media_type}, _entry),
+    do: %{image: %{data: data, mime_type: media_type}}
+
+  defp served({:described, note}, entry), do: %{path: entry.path, note: note}
+
   defp presence(""), do: nil
   defp presence(value), do: value
 

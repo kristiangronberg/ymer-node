@@ -76,8 +76,10 @@ defmodule YmerNode.Mcp.Tools.Scripts.Schemas do
           "required list, which the run is validated against, plus the `write` " <>
           "mark saying whether the action changes anything outside this node. " <>
           "Read before you write. `declarations` names the hosts this script " <>
-          "claims for references, the secrets it resolves and the throttles it " <>
-          "names, with their parameters; the secrets' VALUES " <>
+          "claims for references, the secrets it resolves, the throttles it " <>
+          "names with their parameters, how the cache stores what its URL " <>
+          "action answers (`cache`), and whether it is the web fallback " <>
+          "(`web_fallback`); the secrets' VALUES " <>
           "never appear here or anywhere else. With `code: true` the answer " <>
           "carries the code as well, and a hint says how to share it.",
       related: ["run", "list"]

@@ -42,10 +42,10 @@ defmodule YmerNode.Mcp.McpServer do
       store back: create, list, restore. Reach for a backup before anything
       destructive, and whenever the user asks.
     - references — the registry of where knowledge lives: find returns pointers,
-      each with a fetch recipe where one is derivable, and you make that call
-      yourself. Store pointers and routing notes, never copies of what they
-      point at. Until registry sync lands, a reference added here lives only on
-      this machine.
+      each with a fetch recipe where one is derivable; read serves the content,
+      cached by that recipe. Store pointers and routing notes, never content.
+      Until registry sync lands, a reference added here lives only on this
+      machine.
     - scripts — accepted Elixir modules, for systems with no built-in
       support. Read scripts guide before writing one, and scripts info for
       each promised package you use; describe before you run: an action's

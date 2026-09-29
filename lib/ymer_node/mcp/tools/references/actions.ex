@@ -29,12 +29,20 @@ defmodule YmerNode.Mcp.Tools.References.Actions do
   error as "retry differently", which would fork the registry through a slightly
   mutated uri; pointing at the reference that already exists, with an
   update-or-tag steer, converges instead.
+
+  The cache's four — `read`, `refresh`, `watch` and `unwatch` — are the same
+  boundary over `YmerNode.References.Cache` and `YmerNode.Schedules`: every
+  scalar typed by `YmerNode.Mcp.Tools.References.Validate` first, the seam read
+  once and handed to the cache. `watch` refreshes once as it starts the watch,
+  and a failed refresh is reported beside the watch rather than undoing it: the
+  watch's firings are the next attempts.
   """
 
   alias YmerNode.Mcp.Tools.Helpers
-  alias YmerNode.Mcp.Tools.References.{Format, Validate}
+  alias YmerNode.Mcp.Tools.References.{Errors, Format, Validate}
   alias YmerNode.References
-  alias YmerNode.References.Sources
+  alias YmerNode.References.{Cache, Sources}
+  alias YmerNode.Schedules
 
   def run(:find, data) when is_map(data), do: find(data)
   def run(:add, data) when is_map(data), do: add(data)
@@ -42,6 +50,10 @@ defmodule YmerNode.Mcp.Tools.References.Actions do
   def run(:update, data) when is_map(data), do: update(data)
   def run(:remove, data) when is_map(data), do: remove(data)
   def run(:list, data) when is_map(data), do: list(data)
+  def run(:read, data) when is_map(data), do: read(data)
+  def run(:refresh, data) when is_map(data), do: refresh(data)
+  def run(:watch, data) when is_map(data), do: watch(data)
+  def run(:unwatch, data) when is_map(data), do: unwatch(data)
 
   defp find(data) do
     # The one read this action makes. It goes on the context too, so an
@@ -149,6 +161,67 @@ defmodule YmerNode.Mcp.Tools.References.Actions do
        count: length(entries),
        references: Enum.map(entries, &Format.classified/1)
      }, %{}}
+  end
+
+  defp read(%{"id" => _id} = data) do
+    ctx = %{action_verb: "read reference", data: data}
+
+    with {:ok, id} <- Validate.id(data["id"]),
+         {:ok, offset} <- Validate.offset(data["offset"]),
+         {:ok, lines} <- Validate.lines(data["limit"]),
+         {:ok, column} <- Validate.column(data["column"]),
+         {:ok, reference} <- References.get_reference(id),
+         window = [offset: offset, limit: lines, column: column],
+         {:ok, read} <- Cache.read(reference, Sources.declarations(), window) do
+      {:ok, Format.read(reference, read), %{}}
+    else
+      {:error, reason} -> {:error, {reason, ctx}}
+    end
+  end
+
+  defp refresh(%{"id" => _id} = data) do
+    ctx = %{action_verb: "refresh reference", data: data}
+
+    with {:ok, id} <- Validate.id(data["id"]),
+         {:ok, reference} <- References.get_reference(id),
+         {:ok, refreshed} <- Cache.refresh(reference, Sources.declarations()) do
+      {:ok, Format.refreshed(reference, refreshed), %{}}
+    else
+      {:error, reason} -> {:error, {reason, ctx}}
+    end
+  end
+
+  defp watch(%{"id" => _id} = data) do
+    ctx = %{action_verb: "watch reference", data: data}
+
+    with {:ok, id} <- Validate.id(data["id"]),
+         {:ok, minutes} <- Validate.cadence(data["cadence_minutes"]),
+         {:ok, hours} <- Validate.hours(data["lifetime_hours"]),
+         {:ok, reference} <- References.get_reference(id),
+         {:ok, watch} <- Schedules.watch(reference, minutes, hours) do
+      {:ok, %{watch: watch, refresh: refresh_now(reference)}, %{}}
+    else
+      {:error, reason} -> {:error, {reason, ctx}}
+    end
+  end
+
+  defp unwatch(%{"id" => _id} = data) do
+    ctx = %{action_verb: "stop watching a reference", data: data}
+
+    with {:ok, id} <- Validate.id(data["id"]),
+         {:ok, removed} <- Schedules.unwatch(id) do
+      {:ok, %{message: "Reference ##{id} is no longer watched", removed: removed.name}, %{}}
+    else
+      {:error, reason} -> {:error, {reason, ctx}}
+    end
+  end
+
+  # The watch stands whatever its first refresh answers; the answer says which.
+  defp refresh_now(reference) do
+    case Cache.refresh(reference, Sources.declarations()) do
+      {:ok, refreshed} -> Format.refreshed(reference, refreshed)
+      {:error, reason} -> %{error: Errors.format(reason)}
+    end
   end
 
   # The single-reference actions classify the one row they hold, against the one

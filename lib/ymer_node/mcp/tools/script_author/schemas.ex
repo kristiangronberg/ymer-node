@@ -26,11 +26,13 @@ defmodule YmerNode.Mcp.Tools.ScriptAuthor.Schemas do
   }
 
   @acceptance """
-  Storing code accepts it, at exactly those bytes. Acceptance refuses five \
+  Storing code accepts it, at exactly those bytes. Acceptance refuses six \
   things: a `url_action` `actions/0` does not declare; a `url_action` whose \
   schema has no `url` property; a name that is a built-in reference source \
-  (web, file, other); a host another accepted script already claims; and a \
-  throttle another accepted script declares with other parameters.\
+  (web, file, other); a host another accepted script already claims; a web \
+  fallback (`web_fallback: true`) while another accepted script is the web \
+  fallback; and a throttle another accepted script declares with other \
+  parameters.\
   """
 
   @schemas %{

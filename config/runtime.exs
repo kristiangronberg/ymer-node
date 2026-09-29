@@ -71,6 +71,25 @@ if config_env() == :prod do
   File.mkdir_p!(files_dir)
   config :ymer_node, YmerNode.Script.Context, files_dir: files_dir
 
+  # The cache directory — where a reference's cache entry lives when its script
+  # stores files, answered by `YmerNode.References.Cache.dir/0`. The node's own,
+  # a sibling of db/ and files/ under the mount, and rebuildable with the node
+  # database: every boot removes the files in it no cache entry names. Never
+  # the files directory or a directory inside it — those files are the user's,
+  # and the node touches none of them on its own — so a CACHE_PATH there
+  # refuses boot, naming the variable. Expanded and created here the way the
+  # files directory is.
+  cache_dir = Path.expand(env.("CACHE_PATH") || "/data/cache")
+
+  if cache_dir == files_dir or String.starts_with?(cache_dir, files_dir <> "/") do
+    raise ArgumentError,
+          "CACHE_PATH must name a directory outside the files directory, which is the " <>
+            "user's — such as /data/cache beside /data/files; got #{inspect(cache_dir)}"
+  end
+
+  File.mkdir_p!(cache_dir)
+  config :ymer_node, YmerNode.References.Cache, dir: cache_dir
+
   # Map the journal-mode env to a known atom WITHOUT String.to_atom — it bounds the
   # value to the modes SQLite actually accepts. (`Credo.Check.Warning.UnsafeToAtom`
   # is disabled in .credo.exs, so nothing would stop the unsafe conversion; this is

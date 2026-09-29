@@ -105,7 +105,15 @@ defmodule YmerNode.Scripts.LoaderTest do
       assert facts.contract == 1
       assert facts.description == fixture.name
       assert %{noop: %{description: "n", properties: %{}, write: false}} = facts.actions
-      assert facts.declarations == %{hosts: [], url_action: nil, secrets: [], throttles: %{}}
+
+      assert facts.declarations == %{
+               hosts: [],
+               url_action: nil,
+               secrets: [],
+               throttles: %{},
+               cache: :text,
+               web_fallback: false
+             }
     end
 
     test "refuses code that will not compile and goes on answering" do

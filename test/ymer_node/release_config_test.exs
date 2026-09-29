@@ -23,6 +23,7 @@ defmodule YmerNode.ReleaseConfigTest do
   @runtime_config Path.expand("../../config/runtime.exs", __DIR__)
   @databases_variable "DATABASES_PATH"
   @files_variable "FILES_PATH"
+  @cache_variable "CACHE_PATH"
   # Named here so `setup` can save and restore it: the retired-variable case
   # below sets it, and this module's contract is that it puts back every
   # variable it touches.
@@ -47,6 +48,9 @@ defmodule YmerNode.ReleaseConfigTest do
   [_, files_default] = Regex.run(~r/env\.\("FILES_PATH"\) \|\| "([^"]+)"/, runtime_source)
   @files_default files_default
 
+  [_, cache_default] = Regex.run(~r/env\.\("CACHE_PATH"\) \|\| "([^"]+)"/, runtime_source)
+  @cache_default cache_default
+
   @integer_variables ~r/integer_env\.\("([A-Z_]+)"/
                      |> Regex.scan(runtime_source)
                      |> Enum.map(fn [_, name] -> name end)
@@ -58,6 +62,7 @@ defmodule YmerNode.ReleaseConfigTest do
         [
           @databases_variable,
           @files_variable,
+          @cache_variable,
           @retired_variable,
           @time_zone_variable | @browser_service_variables ++ @integer_variables
         ],
@@ -84,7 +89,8 @@ defmodule YmerNode.ReleaseConfigTest do
     Enum.each(@browser_service_variables, &System.delete_env/1)
     System.put_env(@databases_variable, Path.join(tmp, "db"))
     System.put_env(@files_variable, Path.join(tmp, "files"))
-    %{files_dir: Path.join(tmp, "files")}
+    System.put_env(@cache_variable, Path.join(tmp, "cache"))
+    %{files_dir: Path.join(tmp, "files"), cache_dir: Path.join(tmp, "cache")}
   end
 
   defp release_mcp_config do
@@ -103,6 +109,12 @@ defmodule YmerNode.ReleaseConfigTest do
     @runtime_config
     |> Config.Reader.read!(env: :prod)
     |> get_in([:ymer_node, YmerNode.Script.Context, :files_dir])
+  end
+
+  defp release_cache_dir do
+    @runtime_config
+    |> Config.Reader.read!(env: :prod)
+    |> get_in([:ymer_node, YmerNode.References.Cache, :dir])
   end
 
   defp release_browser_service do
@@ -271,6 +283,45 @@ defmodule YmerNode.ReleaseConfigTest do
          """
     test "the default sits inside the mount, beside db/ and backups/" do
       assert @files_default == "/data/files"
+    end
+  end
+
+  describe "the cache directory" do
+    test "CACHE_PATH is created at the read and lands under the cache", %{cache_dir: cache_dir} do
+      refute File.dir?(cache_dir)
+
+      assert release_cache_dir() == cache_dir
+      assert File.dir?(cache_dir)
+    end
+
+    @tag doc: """
+         The files directory is the user's and the node never touches its
+         contents on its own, while every boot removes the cache directory's
+         unnamed files. A failure means a CACHE_PATH inside the files directory
+         boots, and the next boot's reconcile deletes files the user put there.
+         """
+    test "a path inside the files directory, or the directory itself, refuses boot", %{
+      files_dir: files_dir
+    } do
+      for inside <- [files_dir, Path.join(files_dir, "cache")] do
+        System.put_env(@cache_variable, inside)
+
+        assert_raise ArgumentError, ~r/CACHE_PATH must name a directory outside the files/, fn ->
+          release_cache_dir()
+        end
+      end
+    end
+
+    test "a sibling whose name only starts like the files directory is not inside it", %{
+      files_dir: files_dir
+    } do
+      System.put_env(@cache_variable, files_dir <> "-cache")
+
+      assert release_cache_dir() == files_dir <> "-cache"
+    end
+
+    test "the default sits inside the mount, beside files/" do
+      assert @cache_default == "/data/cache"
     end
   end
 

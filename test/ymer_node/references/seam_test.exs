@@ -22,7 +22,7 @@ defmodule YmerNode.References.SeamTest do
   alias YmerNode.Mcp.Tools.References.Actions
   alias YmerNode.Mcp.Tools.References.Errors
   alias YmerNode.References
-  alias YmerNode.References.Sources
+  alias YmerNode.References.{CacheEntry, Sources}
   alias YmerNode.Scripts.Script
 
   setup do
@@ -116,6 +116,30 @@ defmodule YmerNode.References.SeamTest do
     end
 
     @tag doc: """
+         A read the cache answers from its entry runs no script, so the seam
+         read that derived the recipe is the only query on the scripts table.
+         A count above one means the cache, or the tool beneath it, went back
+         to the database for declarations the action already held.
+         """
+    test "a read the cache answers from its entry reads it exactly once" do
+      reference = seed_reference!("https://tracker.example.fi/browse/ABC-1")
+
+      insert_script!("tracker", %{
+        "hosts" => ["tracker.example.fi"],
+        "url_action" => "issue",
+        "secrets" => []
+      })
+
+      cached!(reference, "tracker")
+      flush()
+
+      assert {:ok, %{fetched: false, text: "# Cached\n"}, %{}} =
+               Actions.run(:read, %{"id" => reference.id})
+
+      assert scripts_queries() == 1
+    end
+
+    @tag doc: """
          The one path with no declarations to hand: `handle_error/1` called with
          a bare reason, which no action produces but the tool's own callback
          still accepts. It reads the seam for itself so the message names every
@@ -176,6 +200,23 @@ defmodule YmerNode.References.SeamTest do
       References.create_reference(%{title: "A reference", uri: uri, tags: ["seed"]})
 
     reference
+  end
+
+  defp cached!(reference, script) do
+    now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+    %CacheEntry{}
+    |> CacheEntry.changeset(%{
+      reference_id: reference.id,
+      uri: reference.uri,
+      script: script,
+      format: "text/markdown",
+      body: "# Cached\n",
+      size_bytes: 9,
+      fetched_at: now,
+      checked_at: now
+    })
+    |> Repo.insert!()
   end
 
   defp insert_script!(name, declarations) do

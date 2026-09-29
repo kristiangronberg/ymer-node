@@ -2,7 +2,8 @@ defmodule YmerNode.Mcp.Tools.References.Schemas do
   @moduledoc """
   Action schemas for the `references` tool. The `notes` surface through the
   `help` tool and are the worker-facing contract documentation — the mode
-  contract, the duplicate rule, and the membrane.
+  contract, the duplicate rule, the read window, and the membrane
+  (`YmerNode.References` § The membrane).
   """
 
   @id %{
@@ -21,8 +22,8 @@ defmodule YmerNode.Mcp.Tools.References.Schemas do
   @description %{
     "type" => "string",
     "description" =>
-      "Local routing knowledge: what lives there and when to look. Never a copy " <>
-        "of the target's content — references are pointers, not content."
+      "Local routing knowledge: what lives there and when to look. Never the " <>
+        "target's content — that lives in the cache, and read serves it."
   }
 
   @uri %{
@@ -80,6 +81,40 @@ defmodule YmerNode.Mcp.Tools.References.Schemas do
     "maximum" => 100
   }
 
+  @offset %{
+    "type" => "integer",
+    "description" => "The line the window starts at, from 1 (default 1).",
+    "minimum" => 1
+  }
+
+  @lines %{
+    "type" => "integer",
+    "description" =>
+      "How many lines the window holds at most (default: as many as fit the byte budget).",
+    "minimum" => 1
+  }
+
+  @column %{
+    "type" => "integer",
+    "description" =>
+      "The character of the first line to go on from, from 1 (default 1) — the " <>
+        "column a cut line's `next` names.",
+    "minimum" => 1
+  }
+
+  @cadence_minutes %{
+    "type" => "integer",
+    "description" => "How often the watch refreshes the entry, in minutes.",
+    "enum" => [5, 15, 30, 60]
+  }
+
+  @lifetime_hours %{
+    "type" => "integer",
+    "description" => "How long the watch lives, in hours (1–12).",
+    "minimum" => 1,
+    "maximum" => 12
+  }
+
   @schemas %{
     find: %{
       description: "Find references by tags, source, and/or a ranked free-text query",
@@ -102,8 +137,8 @@ defmodule YmerNode.Mcp.Tools.References.Schemas do
           "an identifier matches a reference whose uri carries it) or 'filter' (no " <>
           "query given; filters only, newest first). Every result embeds its derived " <>
           "`source` and, where one is derivable, a fetch `recipe` (tool + action + " <>
-          "params): call that yourself to get the live content — this tool never " <>
-          "fetches.",
+          "params): read serves the target's content from the cache, fetching it " <>
+          "through that recipe on a miss.",
       related: ["get", "list", "add"]
     },
     add: %{
@@ -122,9 +157,9 @@ defmodule YmerNode.Mcp.Tools.References.Schemas do
           "nothing — the response points at the reference that already exists, so " <>
           "update or tag that one instead. Same uri with different fragments is " <>
           "legitimate (two sections of one page). The description is routing " <>
-          "knowledge — what lives there, when to look — and never a copy of the " <>
-          "target's content. Until registry sync lands, a reference added here " <>
-          "lives only on this machine.",
+          "knowledge — what lives there, when to look — and never the target's " <>
+          "content, which the cache keeps and read serves. Until registry sync " <>
+          "lands, a reference added here lives only on this machine.",
       related: ["update", "find"]
     },
     get: %{
@@ -150,7 +185,8 @@ defmodule YmerNode.Mcp.Tools.References.Schemas do
         "Only the fields you provide are changed. Tags ride update — there is no " <>
           "separate tag action — so pass the FULL tags array: it replaces, it does " <>
           "not merge. Moving uri/fragment onto another reference's exact pair fails " <>
-          "the uniqueness rule.",
+          "the uniqueness rule, and moving them at all drops the cache entry, so " <>
+          "the next read fetches the new target.",
       related: ["get", "remove"]
     },
     remove: %{
@@ -159,8 +195,8 @@ defmodule YmerNode.Mcp.Tools.References.Schemas do
       required: ["id"],
       defaults: %{},
       notes:
-        "Hard delete — a reference is a pointer, not content, and nothing points " <>
-          "at it. Prefer update when the target has merely moved.",
+        "Hard delete — a reference is a pointer, and its cache entry and its " <>
+          "watch go with it. Prefer update when the target has merely moved.",
       related: ["find", "list"]
     },
     list: %{
@@ -173,6 +209,59 @@ defmodule YmerNode.Mcp.Tools.References.Schemas do
           "reference carries its derived source and, where one is derivable, its " <>
           "fetch recipe.",
       related: ["find", "get"]
+    },
+    read: %{
+      description: "Read a reference's content from the cache, fetching it once when absent",
+      properties: %{"id" => @id, "offset" => @offset, "limit" => @lines, "column" => @column},
+      required: ["id"],
+      defaults: %{},
+      notes:
+        "Text comes back by line window — offset and limit count lines, and a " <>
+          "window never passes 24 000 bytes; next names where the following window " <>
+          "starts, with a column when a single long line was cut. An image comes " <>
+          "back as image content. Any other format is described — its format, " <>
+          "size and path in the cache directory — not served. Every answer " <>
+          "carries fetched_at (when the content last changed, as far as the node " <>
+          "knows) and checked_at (when the script was last asked): the cache is " <>
+          "never ahead of the target and may be behind it. A reference " <>
+          "no script fetches is refused, and its uri is the pointer to follow.",
+      related: ["refresh", "watch", "get"]
+    },
+    refresh: %{
+      description: "Ask the reference's script now whether the target changed, and keep it",
+      properties: %{"id" => @id},
+      required: ["id"],
+      defaults: %{},
+      notes:
+        "Runs the recipe with what the script answered last time, so a script with " <>
+          "a change check answers unchanged cheaply; outcome says fetched or " <>
+          "unchanged. A refusal keeps the entry that was there.",
+      related: ["read", "watch"]
+    },
+    watch: %{
+      description: "Keep a reference's cached content current for a while",
+      properties: %{
+        "id" => @id,
+        "cadence_minutes" => @cadence_minutes,
+        "lifetime_hours" => @lifetime_hours
+      },
+      required: ["id", "cadence_minutes", "lifetime_hours"],
+      defaults: %{},
+      notes:
+        "Starts a watch — a schedule this reference owns, named reference-<id> — " <>
+          "that refreshes the entry every cadence_minutes (5, 15, 30 or 60) for " <>
+          "lifetime_hours (1–12), and refreshes once now. Watching a watched " <>
+          "reference replaces its cadence and lifetime. schedules list shows it " <>
+          "and schedules remove stops it, as unwatch does. Each firing runs " <>
+          "whichever script fetches the reference then.",
+      related: ["unwatch", "read"]
+    },
+    unwatch: %{
+      description: "Stop a reference's watch",
+      properties: %{"id" => @id},
+      required: ["id"],
+      defaults: %{},
+      related: ["watch"]
     }
   }
 

@@ -21,7 +21,7 @@ defmodule YmerNode.Repo.Migrations.PlantExampleScript do
   # who frees the host and wants it imports the release's own copy by hand
   # (`priv/scripts/hex.exs` under the release's `lib/ymer_node-<version>/`).
   # What the row holds, and why its compile runs outside the loader, is
-  # `YmerNode.Scripts.plant_example/0`'s.
+  # `YmerNode.Scripts.plant_example/1`'s.
   #
   # Runs at boot, inside the node's own tree: the compile needs the task
   # supervisor the tree starts ahead of the migrator, so a `mix ecto.migrate`
@@ -29,7 +29,7 @@ defmodule YmerNode.Repo.Migrations.PlantExampleScript do
   # planting off, so a test database never holds a row no case wrote.
   def up do
     if YmerNode.Scripts.plant_example?() do
-      case YmerNode.Scripts.plant_example() do
+      case YmerNode.Scripts.plant_example("hex.exs") do
         {:ok, _script} ->
           :ok
 
@@ -40,7 +40,7 @@ defmodule YmerNode.Repo.Migrations.PlantExampleScript do
           Logger.warning(
             "scripts: the example script was not planted, and no later boot will plant it — " <>
               "#{detail}; once the host is free, import the release's own copy by hand: " <>
-              "#{YmerNode.Scripts.example_path()}"
+              "#{YmerNode.Scripts.example_path("hex.exs")}"
           )
 
         {:error, {reason, detail}} ->
@@ -49,8 +49,12 @@ defmodule YmerNode.Repo.Migrations.PlantExampleScript do
     end
   end
 
-  # Unplants only what `up` planted: the row of origin `shipped`.
+  # Unplants only what `up` planted: the `hex` row of origin `shipped`. Every
+  # example script has a migration of its own, and each one's `down` takes its
+  # own row and no other.
   def down do
-    repo().delete_all(from script in "scripts", where: script.origin == "shipped")
+    repo().delete_all(
+      from script in "scripts", where: script.name == "hex" and script.origin == "shipped"
+    )
   end
 end

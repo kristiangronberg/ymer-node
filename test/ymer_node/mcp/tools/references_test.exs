@@ -28,16 +28,16 @@ defmodule YmerNode.Mcp.Tools.ReferencesTest do
     end
 
     @tag doc: """
-         Destructive because `remove` hard-deletes; closed-world because the tool
-         reaches nothing but this node's own database. A failure on the
-         openWorldHint leg means someone read "the results point outward" as "the
-         tool fetches" — it does not, and a client that believes it does will
-         stop calling the target's own tool.
+         Destructive because `remove` hard-deletes; open-world because `read`
+         on a miss, `refresh` and `watch` run a script that reaches the
+         network. A failure on the openWorldHint leg means a client is told the
+         tool touches nothing outside this node, and grants `watch` — runs
+         nobody is there to see — as though it were a lookup.
          """
-    test "is annotated destructive and closed-world" do
+    test "is annotated destructive and open-world" do
       assert References.annotations() == %{
                "destructiveHint" => true,
-               "openWorldHint" => false
+               "openWorldHint" => true
              }
     end
   end

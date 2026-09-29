@@ -18,6 +18,11 @@ defmodule YmerNode.Mcp.Tools.Schedules.Errors do
 
   def message({:name_taken, detail}, _ctx), do: "#{detail}. `list` shows it."
 
+  def message({:reserved_name, detail}, _ctx),
+    do: "#{detail}. Choose another name, or start a watch with `references watch`."
+
+  def message({:watch, detail}, _ctx), do: "#{detail}."
+
   def message({:invalid_cron_expression, detail}, _ctx),
     do: "#{detail}. For example `0 7 * * MON-FRI`, `*/15 * * * *` or `@daily`."
 

@@ -36,6 +36,21 @@ defmodule YmerNode.Mcp.Tools.SchedulesTest do
       assert Schedules.description() =~ "Needs approval"
       assert Schedules.description() =~ "set it to ask"
     end
+
+    test "the description names the watches it lists and removes" do
+      assert Schedules.description() =~ "the watches the references tool starts"
+      assert Schedules.description() =~ "a watch included"
+    end
+  end
+
+  describe "handle_error/1 — watches" do
+    test "a reserved name and a watch refused by update each name the references action" do
+      assert Schedules.handle_error({:reserved_name, "reference-7 is a watch's name"}) =~
+               "references watch"
+
+      assert Schedules.handle_error({:watch, "reference-7 is the watch on reference 7"}) ==
+               "reference-7 is the watch on reference 7."
+    end
   end
 
   describe "handle_error/1" do

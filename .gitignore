@@ -21,5 +21,10 @@ CLAUDE.local.md
 !/files_dev/.gitkeep
 /ymer_node_test*_files/
 
+# The cache directories — the dev one and the test partitions' — are the node's,
+# rebuilt with the node database, and never tracked.
+/cache_dev/
+/ymer_node_test*_cache/
+
 # The browser service's installed packages; package-lock.json is tracked.
 /browser-service/node_modules/

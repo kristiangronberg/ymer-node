@@ -511,6 +511,31 @@ defmodule YmerNode.Scripts.CLITest do
       assert listed =~ "    no run yet"
     end
 
+    @tag doc: """
+         A watch names a reference and no script, action or args. A failure
+         means the operator's one listing of what runs unattended crashes, or
+         hides, as soon as a reference is watched.
+         """
+    test "list shows a watch beside a script's schedule, naming its reference" do
+      script = import!(segment())
+
+      {_added, 0} =
+        CLI.run(["schedules", "add", "morning-report", script.name, "ping", "0 7 * * *"])
+
+      {:ok, reference} =
+        YmerNode.References.create_reference(%{
+          title: "A watched page",
+          uri: "https://example.test/watched"
+        })
+
+      {:ok, _watch} = YmerNode.Schedules.watch(reference, 15, 1)
+
+      assert {listed, 0} = CLI.run(["schedules", "list"])
+      assert listed =~ "active  morning-report  #{script.name} ping {}"
+      assert listed =~ "active  reference-#{reference.id}  watch on reference #{reference.id}"
+      assert listed =~ "    */15 * * * *  next "
+    end
+
     test "add takes --args as a JSON object and --lifetime" do
       script = import!(segment())
 

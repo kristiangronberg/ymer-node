@@ -65,7 +65,8 @@ defmodule YmerNode.Mcp do
       title: "Ymer Node",
       description:
         "Local capability for LLM workers: a private SQL notebook with vector " <>
-          "search, a registry of pointers at where knowledge lives, and the " <>
+          "search, a registry of pointers at where knowledge lives with a cache of " <>
+          "what they say, and the " <>
           "scripts this node has accepted. All of it stays on this machine. " <>
           "The local half of Ymer."
     }

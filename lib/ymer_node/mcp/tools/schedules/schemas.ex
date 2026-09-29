@@ -85,7 +85,8 @@ defmodule YmerNode.Mcp.Tools.Schedules.Schemas do
           "skipped, never caught up, and so is one while this schedule's previous " <>
           "run is still in flight. The args are stored and listed as given — a key " <>
           "the action does not declare is let through, not refused — so a secret " <>
-          "never goes in them.",
+          "never goes in them. A name starting reference- is refused: those are " <>
+          "the watches' names.",
       related: ["list", "update", "remove"]
     },
     list: %{
@@ -99,7 +100,10 @@ defmodule YmerNode.Mcp.Tools.Schedules.Schemas do
           "it fired, ok, refused, error or timeout, the runner's message, how long " <>
           "it took. refused means the run never started: fix the schedule, or " <>
           "accept the script. error means the script ran and failed. A skipped " <>
-          "firing leaves no trace.",
+          "firing leaves no trace. A watch — named reference-<id> — carries " <>
+          "watch: {reference: id} in place of a script, action and args: it keeps " <>
+          "that reference's cache entry current, each firing running whichever " <>
+          "script fetches the reference then.",
       related: ["add", "update", "remove"]
     },
     update: %{
@@ -117,7 +121,8 @@ defmodule YmerNode.Mcp.Tools.Schedules.Schemas do
           "lifetime given here is read from now, and is how a schedule is renewed, " <>
           "expired or not; without one the end stays where it is. The script and " <>
           "the action are fixed — another is another schedule: remove this one and " <>
-          "add it.",
+          "add it. A watch is refused here: references watch sets its cadence and " <>
+          "lifetime.",
       related: ["list", "add"]
     },
     remove: %{
@@ -127,7 +132,8 @@ defmodule YmerNode.Mcp.Tools.Schedules.Schemas do
       defaults: %{},
       notes:
         "Deletes the schedule; a run already in flight finishes. Removing a script " <>
-          "removes its schedules too.",
+          "removes its schedules too. Removing a watch stops it, as references " <>
+          "unwatch does.",
       related: ["list", "add"]
     }
   }

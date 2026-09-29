@@ -1,16 +1,17 @@
 defmodule YmerNode.Mcp.Tools.Schedules do
   @moduledoc """
   Wymcp tool `schedules` — adding, listing, updating and removing the standing
-  instructions `YmerNode.Schedules` fires.
+  instructions `YmerNode.Schedules` fires, and listing and stopping the watches
+  the `references` tool starts.
 
   A thin boundary over that context, wiring only the framework's callbacks. What
   a schedule is, what `add` refuses and what a firing skips live in the
   context's own moduledoc.
 
   Destructive and open-world, like `YmerNode.Mcp.Tools.Scripts`. The tool itself
-  runs nothing, but what it adds runs a script's action later — with nobody
-  watching, for as long as the schedule lives — and a script reaches the network
-  with the node's own permissions.
+  runs nothing, but what it adds runs a script's action later — unattended, for
+  as long as the schedule lives — and a script reaches the network with the
+  node's own permissions.
 
   ## Why it is a separate tool
 
@@ -40,13 +41,14 @@ defmodule YmerNode.Mcp.Tools.Schedules do
         "script, with fixed args, on a five-field cron expression in the node's " <>
         "time zone, until the schedule's lifetime ends — 90 days at most. add " <>
         "answers the end and the next firing; list shows every schedule with its " <>
-        "next firing, its end or that it expired, and its last run; update " <>
-        "changes the cron expression, the args or the lifetime; remove deletes " <>
-        "one. A firing the node was not up for is skipped, and so is one while " <>
-        "the schedule's previous run is still in flight. Needs approval: a " <>
-        "schedule runs its action — possibly one that writes — with nobody " <>
-        "watching, for as long as it lives; set it to ask, and read what it is " <>
-        "adding."
+        "next firing, its end or that it expired, and its last run — the watches " <>
+        "the references tool starts among them, each marked with its reference; " <>
+        "update changes the cron expression, the args or the lifetime; remove " <>
+        "deletes one, a watch included. A firing the node was not up for is " <>
+        "skipped, and so is one while the schedule's previous run is still in " <>
+        "flight. Needs approval: a schedule runs its action — possibly one that " <>
+        "writes — unattended, for as long as it lives; set it to ask, and read " <>
+        "what it is adding."
 
   @impl true
   def actions, do: Schemas.all()

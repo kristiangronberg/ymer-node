@@ -62,7 +62,7 @@ defmodule YmerNode.Mcp.Tools.ScriptAuthor.SchemasTest do
 
   test "every acceptance door states what acceptance refuses" do
     for action <- [:create, :update, :accept] do
-      assert Schemas.all()[action].notes =~ "Acceptance refuses five things"
+      assert Schemas.all()[action].notes =~ "Acceptance refuses six things"
     end
   end
 

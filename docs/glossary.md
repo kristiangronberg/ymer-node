@@ -48,6 +48,24 @@ _Avoid_: runner (the **run**'s word), Playwright server, browser runner, sidecar
 
 ## C
 
+### cache
+
+The node's set of fetched content: the cache entries in the node database and
+the files in the cache directory. A cache entry is filled by a script, never
+by the node; how far it may lag its target is `YmerNode.References` § The
+membrane's. How it is filled and served is `YmerNode.References.Cache`'s.
+
+_Avoid_: mirror, content store, index (the table is `cache_entries`); Typst's
+*font cache* and a *token cache* stay compound-qualified
+
+### cache directory
+`YmerNode.References.Cache.dir/0`
+_Avoid_: cache folder, references folder, files directory (for it)
+
+### cache entry
+`YmerNode.References.CacheEntry`
+_Avoid_: entry (bare, for a reference), cached copy, snapshot
+
 ### CLI
 The release's operator verbs — `bin/ymer-node`, the overlay beside the release's
 own launcher — run by a human on the machine the node runs on; the node's own
@@ -84,9 +102,10 @@ rule
 
 ### example script
 
-The script the image ships and a fresh install holds — `Script.Hex`, planted
-by a migration on a fresh node database, present to be read as much as run;
-removable, and removal sticks.
+A script the image ships and a fresh install holds — `Script.Hex` and
+`Script.Webpage` — each planted once, by a migration of its own, on a fresh
+node database; present to be read as much as run; removable, and removal
+sticks.
 
 _Avoid_: sample, default script, built-in script (built-in is the reference
 sources' word), template, seed (for it)
@@ -165,7 +184,7 @@ output, relay, sink, echo
 
 ### membrane
 Defined in `YmerNode.References` — the `@moduledoc` section stating that a
-reference is a pointer, never content.
+reference is a pointer, and that its content lives only in the cache.
 _Avoid_: find-don't-re-document, pointer rule
 
 ## N
@@ -186,7 +205,9 @@ always this entry.
 mix-managed database beside the store, whose schema this codebase owns and
 migrates at boot. Rebuildable and never backed up: delete it and the next boot
 recreates it empty. Until registry sync lands it holds the only copy of every
-reference added on this node, and of every script authored here.
+reference added on this node, and of every script authored here. The cache
+entries live here too — the node database is not the cache, which is those
+cache entries and the cache directory's files together.
 
 _Avoid_: cache, node store, second store, node db
 
@@ -234,6 +255,11 @@ for shared script code), battery (bare, for it)
 _Avoid_: entry, bookmark, link; pointer (as the entity name — "pointer" stays
 the informal concept word in membrane prose); *image reference* stays
 compound-qualified for the Docker sense in `Mix.Tasks.YmerNode.Deploy`
+
+### reference validator
+Defined in `YmerNode.Script` — the moduledoc section on a URL action and the
+cache: the string a script answers with a fetch and is handed back on the next.
+_Avoid_: version (for it), etag, hash, stamp
 
 ### references
 `YmerNode.References`
@@ -348,6 +374,15 @@ _Avoid_: latest invariant, tag rule
 _Avoid_: gate, rate limiter, limiter, rate limit (the class, never the thing)
 
 ## W
+
+### watch
+Defined in `YmerNode.Schedules` — the `@moduledoc` section on watches: a
+reference's own schedule, keeping its cache entry current for a bounded time.
+_Avoid_: owned schedule, automatic refresh, auto-refresh, subscription
+
+### web fallback
+`t:YmerNode.Script.declarations/0`, its `web_fallback` key
+_Avoid_: default script, catch-all, wildcard host
 
 ### what a row cannot say
 A sentence the node writes beneath the table in `YmerNode.Script` § What a

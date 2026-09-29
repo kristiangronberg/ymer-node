@@ -14,14 +14,18 @@ defmodule YmerNode.Schedules.LastRunTest do
           :not_loaded,
           :unknown_action,
           :invalid_schema,
-          :invalid_args
+          :invalid_args,
+          :no_recipe,
+          :reference_changed
         ],
         "error" => [
           :script_error,
           :script_raised,
           :script_exited,
           :bad_return,
-          :result_not_encodable
+          :result_not_encodable,
+          :not_cache_contract,
+          :not_text
         ],
         "timeout" => [:timeout]
       }

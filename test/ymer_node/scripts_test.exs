@@ -40,7 +40,15 @@ defmodule YmerNode.ScriptsTest do
       assert checked.contract == 1
       assert checked.description == "the #{segment} script"
       assert Map.keys(checked.actions) |> Enum.sort() == [:fetch, :ping]
-      assert checked.declarations == %{hosts: [], url_action: nil, secrets: [], throttles: %{}}
+
+      assert checked.declarations == %{
+               hosts: [],
+               url_action: nil,
+               secrets: [],
+               throttles: %{},
+               cache: :text,
+               web_fallback: false
+             }
 
       # The negative half of the flag `create` is about to be judged by.
       assert checked.existing == false
@@ -161,7 +169,9 @@ defmodule YmerNode.ScriptsTest do
             "burst" => 2,
             "breaker" => %{"threshold" => 2, "cooldown" => 500}
           }
-        }
+        },
+        "cache" => "text",
+        "web_fallback" => false
       }
 
       assert script.declarations == expected
@@ -260,6 +270,27 @@ defmodule YmerNode.ScriptsTest do
 
       assert %Script{} = create!(segment(), throttled("acct", "rate: 60, burst: 2"))
       assert Repo.aggregate(Script, :count) == 2
+    end
+
+    @tag doc: """
+         The fallback rule at the write doors, read off the accepted rows like
+         the host rule. A failure on the refusal means two scripts both answer
+         for every unclaimed page and the first by name silently wins; one on
+         the replace means the rule counted the script as its own rival.
+         """
+    test "refuses a second web fallback, naming the accepted one, and lets the first replace itself" do
+      fallback = ~s|%{hosts: [], url_action: :fetch, secrets: [], web_fallback: true}|
+      first_segment = segment()
+      first = create!(first_segment, fallback)
+
+      other = segment()
+      purge_on_exit(other)
+
+      assert {:error, {:fallback_claimed, message}} = Scripts.create(code(other, fallback))
+      assert message == "the accepted script #{first.name} is already the web fallback"
+      assert Repo.aggregate(Script, :count) == 1
+
+      assert {:ok, _replaced} = Scripts.update(first.name, code(first_segment, fallback))
     end
 
     test "refuses code that will not compile and stores nothing" do
@@ -507,7 +538,7 @@ defmodule YmerNode.ScriptsTest do
     end
   end
 
-  describe "plant_example/0" do
+  describe "plant_example/1" do
     setup do
       # The example's tree is compiled through the same path the migration
       # takes and purged by it; this covers a case that fails before the purge.
@@ -516,20 +547,22 @@ defmodule YmerNode.ScriptsTest do
     end
 
     test "plants the example as an accepted row of origin shipped" do
-      assert {:ok, script} = Scripts.plant_example()
+      assert {:ok, script} = Scripts.plant_example("hex.exs")
 
       assert script.name == "hex"
       assert script.origin == "shipped"
       assert Script.accepted?(script)
       assert script.contract == YmerNode.Script.contract()
-      assert script.code == File.read!(Scripts.example_path())
+      assert script.code == File.read!(Scripts.example_path("hex.exs"))
       assert script.description =~ "hex.pm"
 
       assert script.declarations == %{
                "hosts" => ["hex.pm"],
                "url_action" => "fetch",
                "secrets" => [],
-               "throttles" => %{}
+               "throttles" => %{},
+               "cache" => "text",
+               "web_fallback" => false
              }
     end
 
@@ -540,18 +573,18 @@ defmodule YmerNode.ScriptsTest do
          an operator's own copy overwritten by the build's.
          """
     test "plants once, and answers the row already there on a second call" do
-      assert {:ok, planted} = Scripts.plant_example()
-      assert {:ok, again} = Scripts.plant_example()
+      assert {:ok, planted} = Scripts.plant_example("hex.exs")
+      assert {:ok, again} = Scripts.plant_example("hex.exs")
 
       assert again.id == planted.id
       assert Repo.aggregate(Script, :count) == 1
     end
 
     test "keeps an operator's own row of that name untouched" do
-      assert {:ok, imported} = Scripts.import(File.read!(Scripts.example_path()))
+      assert {:ok, imported} = Scripts.import(File.read!(Scripts.example_path("hex.exs")))
       assert imported.origin == "imported"
 
-      assert {:ok, kept} = Scripts.plant_example()
+      assert {:ok, kept} = Scripts.plant_example("hex.exs")
       assert kept.id == imported.id
       assert kept.origin == "imported"
     end
@@ -567,7 +600,7 @@ defmodule YmerNode.ScriptsTest do
       claimed = ~s|%{hosts: ["hex.pm"], url_action: :fetch, secrets: []}|
       claimant = create!(segment(), claimed)
 
-      assert {:error, {:host_claimed, message}} = Scripts.plant_example()
+      assert {:error, {:host_claimed, message}} = Scripts.plant_example("hex.exs")
       assert message =~ "hex.pm is already claimed by the accepted script #{claimant.name}"
 
       assert Repo.get_by(Script, name: "hex") == nil
@@ -577,12 +610,12 @@ defmodule YmerNode.ScriptsTest do
     end
 
     test "leaves no tree behind for the loader to meet" do
-      assert {:ok, _script} = Scripts.plant_example()
+      assert {:ok, _script} = Scripts.plant_example("hex.exs")
       refute Code.ensure_loaded?(Module.concat(["Script", "Hex"]))
     end
 
     test "the planted row is removed like any other" do
-      assert {:ok, planted} = Scripts.plant_example()
+      assert {:ok, planted} = Scripts.plant_example("hex.exs")
       assert {:ok, _removed} = Scripts.remove(planted.name)
       assert {:error, {:not_found, _detail}} = Scripts.get(planted.name)
     end
@@ -758,7 +791,9 @@ defmodule YmerNode.ScriptsTest do
                "hosts" => [],
                "url_action" => nil,
                "secrets" => [],
-               "throttles" => %{}
+               "throttles" => %{},
+               "cache" => "text",
+               "web_fallback" => false
              }
 
       assert {:ok, with_code} = Scripts.describe(script.name, code: true)

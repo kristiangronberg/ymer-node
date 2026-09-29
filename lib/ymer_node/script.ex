@@ -76,6 +76,39 @@ defmodule YmerNode.Script do
   action, bounded by the deadline `YmerNode.Scripts.Runner` states and killed
   past it. After every edit, `check` again; `update` replaces the code whole.
 
+  ## A URL action and the cache
+
+  The action `declarations/0` names as `url_action` is how the node fills its
+  cache for a reference whose host this script claims — at a `references read`
+  that finds nothing cached, at a `refresh`, and at every firing of a watch.
+  The node runs it with the reference's uri under `url`, its fragment under
+  `fragment` where it has one, and, when this script filled the entry, what it
+  answered last time under `reference_validator`. Those keys arrive whether or
+  not the action's schema names them; name the ones it reads. It answers one of
+  two maps:
+
+  - `%{"content" => text, "format" => media_type, "reference_validator" => v}`
+    — the target as a reader should see it. `format` defaults to
+    `"text/markdown"`; `reference_validator` is optional, any string this
+    script wants handed back next time — an ETag, a version number, a hash of
+    what it answered — which the node keeps and never reads.
+  - `%{"unchanged" => true}` — handed a `reference_validator`, the script's own
+    cheap check found nothing new; the node keeps the entry and notes only that
+    it checked.
+
+  Text is kept in the node database: valid UTF-8 with no NUL byte, at most
+  5 000 000 bytes, and answered with a `text/*` format — `text/markdown`,
+  `text/plain`, `text/csv` — because text is all such a cache entry can be
+  served as; anything else is converted to text first, or kept by a script
+  that stores files. An empty page is kept as an empty cache entry.
+  A script whose answers can be bytes that are not text declares
+  `cache: :file`: every run of its URL action is then also handed `cache_path`,
+  an absolute path to write the bytes to, and it answers the map without
+  `content`. PNG, JPEG, GIF and WebP images are served to the reader as images,
+  text as text, and anything else is described with its path — a script meant
+  for a model converts first. The cache is read-only: nothing the action
+  answers is ever written back to the target.
+
   ## What a script may call
 
   What stays callable across releases: Elixir's standard library and the
@@ -199,26 +232,36 @@ defmodule YmerNode.Script do
   @typedoc """
   A script's claims and needs the node acts on: the http(s) hosts it claims for
   references with its one URL-accepting action, the secrets it resolves by name,
-  and the throttles it names with their parameters.
+  the throttles it names with their parameters, how the cache stores what its
+  URL action answers, and whether it is the web fallback.
 
   `hosts` are the hosts a reference is classified by — the exact host of a
   browsable link, which is often not the host the script calls (a script
   claiming `github.com` reaches `api.github.com`). `url_action` names the one
   action that accepts a uri whole under `url`; it is `nil` for a script that
-  serves no references, and then `hosts` is empty too. `secrets` are the names
-  the script resolves through its context, so a missing one fails plainly at the
-  run instead of deep inside a request. `throttles` maps each throttle's name to
-  its parameters, `t:throttle/0`, and a script that names none leaves it out.
+  serves no references, and then `hosts` is empty and `web_fallback` false.
+  `secrets` are the names the script resolves through its context, so a missing
+  one fails plainly at the run instead of deep inside a request. `throttles`
+  maps each throttle's name to its parameters, `t:throttle/0`, and a script that
+  names none leaves it out.
 
-  The map is keyed and open by design: a change-check action and a non-http
-  scheme claim are later keys, and a script written today keeps working when one
-  arrives.
+  `cache` is where the node keeps what the URL action answers: `:text`, the
+  default, in the node database, or `:file`, in the cache directory, for a
+  script whose answers can be bytes that are not text. `web_fallback: true`
+  makes the script the web fallback — the one accepted script whose URL action
+  serves every http(s) reference no exact host claim takes. It claims no host
+  by it, and acceptance refuses a second.
+
+  The map is keyed and open by design: a non-http scheme claim is a later key,
+  and a script written today keeps working when one arrives.
   """
   @type declarations :: %{
           required(:hosts) => [String.t()],
           required(:url_action) => atom() | nil,
           required(:secrets) => [String.t()],
-          optional(:throttles) => %{String.t() => throttle()}
+          optional(:throttles) => %{String.t() => throttle()},
+          optional(:cache) => :text | :file,
+          optional(:web_fallback) => boolean()
         }
 
   @typedoc """
@@ -252,12 +295,16 @@ defmodule YmerNode.Script do
   @doc "Every action the script serves, keyed by its atom name."
   @callback actions() :: %{atom() => action()}
 
-  @doc "What the node acts on: claimed hosts, the URL action, secret names, throttles."
+  @doc """
+  What the node acts on: claimed hosts, the URL action, secret names, throttles,
+  the cache mode and the web-fallback mark.
+  """
   @callback declarations() :: declarations()
 
   @doc """
   Runs one action. `{:ok, term}` must be JSON-encodable, so bytes a script
-  produced — a PDF, a spreadsheet — leave as a file in the files directory
+  produced — a PDF, a spreadsheet — leave as a file in the files directory,
+  at the `cache_path` a file-storing script's URL action is handed,
   or as a request body, never as the answer. Anything else — an
   `{:error, term}`, a raise, an exit — is answered as an error naming the
   script, the action and what happened.

@@ -2,9 +2,11 @@ defmodule YmerNode.Schedules do
   @moduledoc """
   The node's schedules: standing instructions to run one action of one accepted
   script, with fixed args, on a cron expression in the node's time zone, until
-  each one's [*lifetime*](docs/glossary.md#lifetime) ends. They are added,
-  listed, updated and removed through the `schedules` tool and the CLI, and
-  fired by `YmerNode.Schedules.Scheduler`.
+  each one's [*lifetime*](docs/glossary.md#lifetime) ends — and the watches that
+  keep references' cache entries current (§ Watches). They are added, listed,
+  updated and removed through the `schedules` tool and the CLI, a watch is
+  started and stopped through the `references` tool, and all of them are fired
+  by `YmerNode.Schedules.Scheduler`.
 
   The node is a script runner with scheduling flexibility — not a reliable
   scheduler, and not a work engine. A [*firing*](docs/glossary.md#firing)
@@ -31,6 +33,8 @@ defmodule YmerNode.Schedules do
           Scripts[YmerNode.Scripts]
           Runner[Scripts.Runner]
           Context[Script.Context]
+          Cache[References.Cache]
+          Sources[References.Sources]
           Repo[(YmerNode.Repo)]
       end
 
@@ -43,6 +47,8 @@ defmodule YmerNode.Schedules do
       Schedules -->|"check/3 before storing and firing, longest/1"| Runner
       Schedules -->|"run/3 at a firing"| Scripts
       Schedules -->|"the node time zone"| Context
+      Schedules -->|"a watch's recipe, and its refresh"| Cache
+      Schedules -->|"the declarations a watch's firing reads"| Sources
       Schedules --> Repo
   ```
 
@@ -68,12 +74,12 @@ defmodule YmerNode.Schedules do
 
   ```mermaid
   stateDiagram-v2
-      [*] --> Active : add
-      Active --> Active : update
+      [*] --> Active : add, or watch
+      Active --> Active : update, or watch again
       Active --> Expired : its lifetime ends
-      Expired --> Active : update with a lifetime
-      Active --> [*] : remove, or its script's remove
-      Expired --> [*] : remove, or its script's remove
+      Expired --> Active : update with a lifetime, or watch again
+      Active --> [*] : remove, unwatch, or its script's or reference's remove
+      Expired --> [*] : remove, unwatch, or its script's or reference's remove
 
       note right of Active
           fires at each firing of its cron
@@ -86,6 +92,25 @@ defmodule YmerNode.Schedules do
   schedule is renewed. An `update` without one leaves the end where it stands, so
   adjusting a schedule's cron expression or args never extends its life:
   renewing stays a deliberate act.
+
+  ## Watches
+
+  A **watch** is a reference's own schedule: it keeps that reference's cache
+  entry current, refreshing it at a cadence of 5, 15, 30 or 60 minutes for a
+  lifetime of 1 to 12 hours. It names no script and no action. Each firing
+  looks the reference up, derives its fetch recipe at that moment and runs the
+  cache's conditional refresh (`YmerNode.References.Cache.refresh/2`), so a
+  watch follows a changed uri, a newly accepted claimant or the web fallback
+  without being touched; a firing that finds no script to fetch the reference
+  is kept as `refused` and the watch lives on to its end.
+
+  `watch/3` starts one or replaces the one a reference has — cadence and
+  lifetime both set afresh, the last run kept — and `unwatch/1` stops it. Its
+  name is the node's, `reference-<id>`, and `add` refuses that prefix to anyone
+  else. `list` shows a watch among the other schedules, marked with its
+  reference, and `remove` stops it; `update` refuses it, because the cadence
+  and the lifetime are bounded by the watch and a free cron expression would
+  step outside them. The reference's delete takes its watch with it.
 
   ## A firing
 
@@ -113,6 +138,7 @@ defmodule YmerNode.Schedules do
   """
   import Ecto.Query, warn: false
 
+  alias YmerNode.References.{Cache, Reference, Sources}
   alias YmerNode.Repo
   alias YmerNode.Schedules.{Cron, InFlight, LastRun, Lifetime, Schedule}
   alias YmerNode.Script.Context
@@ -120,13 +146,19 @@ defmodule YmerNode.Schedules do
   alias YmerNode.Scripts.Runner
   alias YmerNode.Scripts.Script
 
+  @watch_prefix "reference-"
+
+  # A watch's cadence, in minutes, as the cron expression each one fires on.
+  @cadences %{5 => "*/5 * * * *", 15 => "*/15 * * * *", 30 => "*/30 * * * *", 60 => "0 * * * *"}
+
   # ─── Reading ────────────────────────────────────────────────────────
 
   @doc """
   Every schedule, ordered by name: what runs, when next, until when, and how the
   last run went — the shape `add/1` and `update/2` answer too.
 
-  Each entry carries `name`, `script`, `action`, `args`, `cron_expression`,
+  Each entry carries `name`, `script`, `action` and `args` — for a watch,
+  `watch: %{reference: id}` in their place — `cron_expression`,
   `state` (`"active"` or `"expired"`), `ends_at`, `next_firing` — `nil` once
   expired, when the expression comes due no more before the end, when its walk
   gives out, or when the stored expression no longer parses under the running
@@ -147,7 +179,8 @@ defmodule YmerNode.Schedules do
   @doc """
   The schedules still inside their lifetime at `at` — what
   `YmerNode.Schedules.Scheduler` reads every minute. Their scripts are not
-  loaded: a firing reads its script afresh (`fire/2`).
+  loaded: a firing reads its script — or, for a watch, derives its recipe —
+  afresh (`fire/2`).
   """
   def active(%DateTime{} = at) do
     at = DateTime.truncate(at, :second)
@@ -199,6 +232,7 @@ defmodule YmerNode.Schedules do
   """
   def update(name, changes) when is_binary(name) and is_map(changes) do
     with {:ok, schedule} <- fetch(name),
+         :ok <- check_not_watch(schedule),
          {:ok, attrs} <- changed(schedule, changes) do
       schedule
       |> Schedule.changeset(attrs)
@@ -207,7 +241,53 @@ defmodule YmerNode.Schedules do
     end
   end
 
-  @doc "Removes a schedule, answering the row that went."
+  @doc """
+  Starts a watch on a reference, or replaces the one it has — its cadence and
+  its lifetime both set afresh from now, its last run kept — answered as
+  `list/0` shows it. `cadence_minutes` is one of 5, 15, 30 or 60, and
+  `lifetime_hours` one of 1 to 12; anything else is refused by name.
+  """
+  def watch(%Reference{} = reference, cadence_minutes, lifetime_hours)
+      when is_integer(cadence_minutes) and is_integer(lifetime_hours) do
+    with {:ok, cron_expression} <- cadence(cadence_minutes),
+         {:ok, ends_at} <- watch_end(lifetime_hours) do
+      name = @watch_prefix <> Integer.to_string(reference.id)
+
+      (Repo.get_by(Schedule, reference_id: reference.id) || %Schedule{})
+      |> Schedule.watch_changeset(%{
+        name: name,
+        reference_id: reference.id,
+        args: %{},
+        cron_expression: cron_expression,
+        ends_at: ends_at
+      })
+      |> write_watch(reference)
+      |> answered(name)
+    end
+  end
+
+  # As in `insert/2`: a reference removed after the caller loaded it arrives as
+  # the adapter's unnamed foreign-key raise, answered as the not-found it is.
+  defp write_watch(changeset, reference) do
+    Repo.insert_or_update(changeset)
+  rescue
+    error in Ecto.ConstraintError -> reference_gone(error, reference, __STACKTRACE__)
+  end
+
+  defp reference_gone(%Ecto.ConstraintError{type: :foreign_key}, reference, _stacktrace),
+    do: {:error, {:not_found, "no reference #{reference.id}"}}
+
+  defp reference_gone(error, _reference, stacktrace), do: reraise(error, stacktrace)
+
+  @doc "Stops a reference's watch, answering the row that went."
+  def unwatch(reference_id) when is_integer(reference_id) do
+    case Repo.get_by(Schedule, reference_id: reference_id) do
+      nil -> {:error, {:not_found, "reference #{reference_id} has no watch"}}
+      %Schedule{name: name} -> remove(name)
+    end
+  end
+
+  @doc "Removes a schedule, a watch included, answering the row that went."
   def remove(name) when is_binary(name) do
     with {:ok, schedule} <- fetch(name) do
       case Repo.delete_all(from row in Schedule, where: row.id == ^schedule.id) do
@@ -227,50 +307,101 @@ defmodule YmerNode.Schedules do
   Runs in the calling process for as long as the run lasts;
   `YmerNode.Schedules.Scheduler` calls it from a task of its own for each
   firing. The script is read again here, by the row the schedule holds, so the
-  firing runs whatever is accepted under that name at this moment.
+  firing runs whatever is accepted under that name at this moment; a watch's
+  recipe is derived here from its reference, as a read derives it. A firing
+  that raises is recorded as an `error` like any failed run.
   """
   def fire(%Schedule{} = schedule, %DateTime{} = fired_at) do
     started = System.monotonic_time(:millisecond)
 
-    case prepare(schedule) do
-      {:ok, script, schema} -> run_once(schedule, script, schema, {fired_at, started})
+    case contained(schedule, fn -> prepare(schedule) end) do
+      {:ok, run} -> run_once(schedule, run, {fired_at, started})
       {:error, _reason} = refusal -> record(schedule, refusal, {fired_at, started})
     end
   end
 
-  defp prepare(%Schedule{script_id: id, action: action, args: args}) do
+  # What a firing runs, checked the way the run will be: the script, its
+  # action's schema for the deadline, and the call itself.
+  defp prepare(%Schedule{reference_id: nil, script_id: id, action: action, args: args}) do
     case Repo.get(Script, id) do
       nil ->
         {:error, {:not_found, "the script this schedule runs is gone"}}
 
       %Script{} = script ->
-        with {:ok, schema} <- Runner.check(script, action, args), do: {:ok, script, schema}
+        with {:ok, schema} <- Runner.check(script, action, args),
+             do: {:ok, run(script, schema, fn -> Scripts.run(script.name, action, args) end)}
+    end
+  end
+
+  # A watch names no script: its firing derives the recipe at this moment, as a
+  # read does, and runs the cache's refresh — one read of the seam for both.
+  defp prepare(%Schedule{reference_id: reference_id}) do
+    declarations = Sources.declarations()
+
+    with {:ok, reference} <- watched(reference_id),
+         {:ok, recipe} <- recipe(reference, declarations),
+         {:ok, script} <- Scripts.get(recipe.script),
+         {:ok, schema} <- Runner.check(script, recipe.action, %{"url" => reference.uri}) do
+      {:ok, run(script, schema, fn -> Cache.refresh(reference, declarations) end)}
+    end
+  end
+
+  # A reference no script fetches any more keeps no entry, as a read or a
+  # refresh of it would leave none.
+  defp recipe(reference, declarations) do
+    with {:error, _no_recipe} = refusal <- Cache.recipe(reference, declarations) do
+      Cache.drop(reference.id)
+      refusal
+    end
+  end
+
+  defp run(script, schema, call), do: %{script: script.name, schema: schema, call: call}
+
+  defp watched(reference_id) do
+    case Repo.get(Reference, reference_id) do
+      nil -> {:error, {:not_found, "the reference this watch keeps is gone"}}
+      %Reference{} = reference -> {:ok, reference}
     end
   end
 
   # The entry is taken before the run and dropped after it, whatever happens;
   # the process registry drops it anyway if this process dies, so a killed
   # firing never leaves its schedule skipping for ever.
-  defp run_once(schedule, script, schema, timing) do
-    until = latest_end(Runner.longest(schema))
+  defp run_once(schedule, run, timing) do
+    until = latest_end(Runner.longest(run.schema))
 
-    case InFlight.register(schedule.id, schedule.name, script.name, until) do
-      :ok -> run_registered(schedule, script, timing)
+    case InFlight.register(schedule.id, schedule.name, run.script, until) do
+      :ok -> run_registered(schedule, run.call, timing)
       :in_flight -> :skipped
     end
   end
 
   # The entry goes as the run ends, before the record is written: a refusal
-  # read while the record waits on the database names no finished run.
-  defp run_registered(schedule, script, timing) do
+  # read while the record waits on the database names no finished run. The
+  # runner contains a script's own raise; what a watch's refresh does around the
+  # run — the database, the cache directory — is contained here, so every
+  # firing records an outcome.
+  defp run_registered(schedule, call, timing) do
     result =
       try do
-        Scripts.run(script.name, schedule.action, schedule.args)
+        contained(schedule, call)
       after
         InFlight.unregister(schedule.id)
       end
 
     record(schedule, result, timing)
+  end
+
+  # A raise answered as the failed run it is — around the run, and before it,
+  # where a watch looks up its reference and derives its recipe.
+  defp contained(schedule, fun) do
+    fun.()
+  rescue
+    exception ->
+      {:error, {:script_raised, "#{schedule.name}: #{Exception.message(exception)}"}}
+  catch
+    kind, reason ->
+      {:error, {:script_raised, "#{schedule.name}: #{Exception.format_banner(kind, reason)}"}}
   end
 
   # The run's deadline from now, rounded up to the whole second: a refusal
@@ -302,6 +433,12 @@ defmodule YmerNode.Schedules do
           "#{name} is not a schedule name — lowercase letters, digits, - and _, " <>
             "starting with a letter or digit"}}
 
+      String.starts_with?(name, @watch_prefix) ->
+        {:error,
+         {:reserved_name,
+          "#{name} is a watch's name — names starting #{@watch_prefix} belong to the " <>
+            "watches the references tool starts"}}
+
       Repo.exists?(from schedule in Schedule, where: schedule.name == ^name) ->
         {:error, taken(name)}
 
@@ -309,6 +446,32 @@ defmodule YmerNode.Schedules do
         :ok
     end
   end
+
+  defp check_not_watch(%Schedule{reference_id: nil}), do: :ok
+
+  defp check_not_watch(%Schedule{name: name, reference_id: reference_id}) do
+    {:error,
+     {:watch,
+      "#{name} is the watch on reference #{reference_id} — its cadence and lifetime " <>
+        "change through references watch, and references unwatch stops it"}}
+  end
+
+  defp cadence(minutes) do
+    case Map.fetch(@cadences, minutes) do
+      {:ok, cron_expression} ->
+        {:ok, cron_expression}
+
+      :error ->
+        {:error,
+         {:invalid_cadence, "every #{minutes} minutes is not a watch's cadence — 5, 15, 30 or 60"}}
+    end
+  end
+
+  defp watch_end(hours) when hours in 1..12,
+    do: Lifetime.ends_at("PT#{hours}H", DateTime.utc_now(), Context.time_zone())
+
+  defp watch_end(hours),
+    do: {:error, {:invalid_lifetime, "#{hours} hours is not a watch's lifetime — 1 to 12"}}
 
   defp changed(schedule, changes) do
     with {:ok, cron_expression} <- changed_cron_expression(changes),
@@ -374,6 +537,8 @@ defmodule YmerNode.Schedules do
       else: {:error, changeset}
   end
 
+  defp answered({:error, {:not_found, _detail}} = refusal, _name), do: refusal
+
   defp taken(name) do
     {:name_taken,
      "a schedule named #{name} already exists — update it, or remove it and add it again"}
@@ -387,18 +552,24 @@ defmodule YmerNode.Schedules do
     zone = Context.time_zone()
     expired? = DateTime.compare(schedule.ends_at, now) != :gt
 
-    %{
+    schedule
+    |> subject()
+    |> Map.merge(%{
       name: schedule.name,
-      script: schedule.script.name,
-      action: schedule.action,
-      args: schedule.args,
       cron_expression: schedule.cron_expression,
       state: if(expired?, do: "expired", else: "active"),
       ends_at: render(schedule.ends_at, zone),
       next_firing: if(expired?, do: nil, else: next_firing(schedule, now, zone)),
       last_run: last_run(schedule, zone)
-    }
+    })
   end
+
+  # What a schedule runs: a script's action with its args, or — for a watch —
+  # the reference it keeps.
+  defp subject(%Schedule{reference_id: nil} = schedule),
+    do: %{script: schedule.script.name, action: schedule.action, args: schedule.args}
+
+  defp subject(%Schedule{reference_id: reference_id}), do: %{watch: %{reference: reference_id}}
 
   # A stored expression the running code no longer parses — a stricter rule
   # than the one that stored it — answers no next firing, as the scheduler

@@ -12,10 +12,10 @@ defmodule YmerNode do
 
   The line against a work engine falls here: on its own, the node does one
   thing — it runs an accepted script's action on a schedule, with fixed args and
-  nobody there (`YmerNode.Schedules`). It is a script runner with scheduling
-  flexibility, not a reliable scheduler, and nothing it runs is routed, chained,
-  retried or handed to a model; anything that needs a task, a claim or an LLM is
-  ymer's.
+  nobody there, a watched reference's fetch among them (`YmerNode.Schedules`).
+  It is a script runner with scheduling flexibility, not a reliable scheduler,
+  and nothing it runs is routed, chained, retried or handed to a model; anything
+  that needs a task, a claim or an LLM is ymer's.
 
   Two properties shape everything below. **Local serving never depends on ymer**:
   every tool here answers whether or not the node can reach anything, so an
@@ -23,10 +23,16 @@ defmodule YmerNode do
   precious thing** — `notebook.db`. Everything else it holds is rebuildable, which
   is why exactly one subsystem has a durability obligation. That is the
   **durability rule**, and "rebuildable" is the admission test for anything else
-  the node stores. `node.db` is what the rule has admitted so far: its schema is
-  this codebase's and migrations run at every boot, so deleting it costs nothing
-  a boot does not put back. It is never backed up, and "back up the node" goes
-  on meaning the store alone. The files directory a script reads and writes
+  the node stores. `node.db` and the cache directory are what the rule has
+  admitted so far. The node database's schema is this codebase's and migrations
+  run at every boot, so deleting it costs nothing a boot does not put back; the
+  cache directory (`YmerNode.References.Cache.dir/0`) holds only what cache
+  entries in that database name, all of it refetchable: every boot removes the
+  files no cache entry names and the cache entries whose file is gone, and a
+  cache entry whose file goes between boots is fetched again at its next read —
+  so the directory follows the database, and the two are rebuilt together.
+  Neither is backed up, and "back up the node" goes on meaning the store
+  alone. The files directory a script reads and writes
   (`YmerNode.Script.Context.files_dir/1`) sits outside the rule altogether: the
   node creates it and never touches its contents on its own, so the files there
   are the user's — neither precious to the node nor rebuildable by it.
@@ -45,6 +51,7 @@ defmodule YmerNode do
       BackupFiles[(backup files)]
       SecretsFile[(secrets.env)]
       FilesDir[(files directory)]
+      CacheDir[(cache directory)]
       BrowserService(browser service)
 
       Mcp -->|"serves the notebook tool"| Notebook
@@ -56,6 +63,8 @@ defmodule YmerNode do
       References -->|"declarations of accepted scripts"| Scripts
       Scripts -->|"reserved names, claimed hosts"| References
       References --> NodeDB
+      References -->|"runs a recipe to fill the cache"| Scripts
+      References -->|"file cache entries"| CacheDir
       Scripts --> NodeDB
       Scripts -->|"a run's batteries"| Notebook
       Scripts --> SecretsFile
@@ -65,6 +74,7 @@ defmodule YmerNode do
       Schedules -->|"runs an action at each firing"| Scripts
       Scripts -->|"the schedule holding a run in flight"| Schedules
       Schedules --> NodeDB
+      Schedules -->|"a watch's firing refreshes an entry"| References
       Backup -->|"VACUUM INTO"| NotebookDB
       Backup --> BackupFiles
   ```
@@ -106,9 +116,18 @@ defmodule YmerNode do
   pointer naming where knowledge lives and when to look, never what it says. It
   exists because a worker that re-documents what already lives somewhere has
   made a second copy to keep in step, while a pointer and the call that follows
-  it stay correct on their own. The rule that keeps a reference a pointer — the
-  membrane — is stated there, and it is the reason this context stores no
-  fetched content and the tool never fetches.
+  it stay correct on their own. The rule that keeps a reference a pointer while
+  its content lives in the cache — the membrane — is stated there.
+
+  `YmerNode.References.Cache` is the cache: what each reference's target says,
+  fetched by running the reference's own script — the node still never makes
+  an outbound call — and served by the `references` tool as a window of text,
+  an image, or a description. It exists so that a reference reads like a local
+  file while staying a pointer: every entry says how old it is, and how far it
+  may lag its target is the membrane's. `YmerNode.References.CacheEntry` is its
+  row, `YmerNode.References.Cache.Window` the line window it serves text by,
+  and `YmerNode.References.Cache.Reconcile` the boot step that keeps the cache
+  directory rebuildable.
 
   `YmerNode.References.Sources` derives a reference's source and fetch recipe
   from its uri at read time, against declarations that accepted scripts supply,
@@ -143,7 +162,7 @@ defmodule YmerNode do
   the hash of its code and the hash this node accepted; `run` refuses unless the
   two are equal. Code that changed after it was accepted is code nobody accepted.
   Three doors accept today — an MCP client through `script_author`, a human
-  through the CLI, and the build, whose example script a migration plants on a
+  through the CLI, and the build, whose example scripts migrations plant on a
   fresh node database at exactly the bytes the image carries, because whoever
   built the image read them — and each is a deliberate act by someone who can
   read what they are landing. A fourth, registry sync, is why the unaccepted
@@ -213,12 +232,14 @@ defmodule YmerNode do
   [*lifetime*](docs/glossary.md#lifetime) ends — 90 days at most, because a
   schedule nobody remembers must not fire for ever. It exists because a report
   wanted at 07:00, or a check every hour, cannot wait for a session to ask, and
-  one mechanism serves every such need. A firing runs through
-  `YmerNode.Scripts.run/3`, so everything the Scripts section says of a run holds
-  for it. A schedule lives in `node.db` beside its script and is deleted with
-  it: it means nothing without the script it runs, so it shares that row's fate
-  under the durability rule. `YmerNode.Schedules.Scheduler` is the clock that
-  fires them.
+  one mechanism serves every such need — a [*watch*](docs/glossary.md#watch)
+  too, the schedule a reference owns to keep its cache entry current for a few
+  hours. A firing runs through `YmerNode.Scripts.run/3`, so everything the
+  Scripts section says of a run holds for it. A schedule lives in `node.db`
+  beside what it runs — its script, or a watch's reference — and is deleted
+  with it: it means nothing without that row, so it shares the row's fate under
+  the durability rule. `YmerNode.Schedules.Scheduler` is the clock that fires
+  them.
 
   ## The MCP surface
 
@@ -238,7 +259,9 @@ defmodule YmerNode do
   granted the first without the second: what runs is bounded by what has been
   accepted, and accepting is the decision worth a human's attention.
   The `schedules` tool is a third for the same reason: a client allowed to run
-  what has been accepted is not thereby allowed to set it running with nobody
-  watching.
+  what has been accepted is not thereby allowed to set it running unattended.
+  The one exception is bounded: `references` starts a watch — one reference's
+  URL action, for twelve hours at most — and the watch is listed and removable
+  through `schedules` like any other.
   """
 end

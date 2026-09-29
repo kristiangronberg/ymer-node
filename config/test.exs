@@ -96,6 +96,11 @@ config :ymer_node, YmerNode.Script.Context,
   files_dir:
     Path.expand("../ymer_node_test#{System.get_env("MIX_TEST_PARTITION")}_files", __DIR__)
 
+# The cache directory is partitioned the same way. Nothing creates it at boot in
+# test, where the cache's boot step is off; the cases that write there create it.
+config :ymer_node, YmerNode.References.Cache,
+  dir: Path.expand("../ymer_node_test#{System.get_env("MIX_TEST_PARTITION")}_cache", __DIR__)
+
 # The loader compiles every accepted row inside its own `init/1`, which reads
 # the node database — and at application start the sandbox holds no checked-out
 # connection, so that read would fail against a perfectly healthy build. Same
@@ -104,10 +109,10 @@ config :ymer_node, YmerNode.Script.Context,
 # itself, which is the boot path with an owner in hand.
 config :ymer_node, YmerNode.Scripts.Loader, boot_compile: false
 
-# The migration that plants the example script reads this before planting, and
+# The migrations that plant the example scripts read this before planting, and
 # it is off here for the reason the loader's boot compile is: a test database
 # must hold only what a case wrote, so every listing a case asserts on starts
-# empty. `YmerNode.ScriptsTest` calls `plant_example/0` itself.
+# empty. `YmerNode.ScriptsTest` calls `plant_example/1` itself.
 config :ymer_node, YmerNode.Scripts, plant_example: false
 
 # The scheduler reads the node database every minute, and at application start
@@ -116,3 +121,7 @@ config :ymer_node, YmerNode.Scripts, plant_example: false
 # `plan/4`, `YmerNode.Schedules.SchedulerMinuteTest` hands it one minute inside
 # its own sandbox, and `YmerNode.SchedulesTest` calls `fire/2` itself.
 config :ymer_node, YmerNode.Schedules.Scheduler, enabled: false
+
+# The cache's boot reconcile reads the entries, off here for the same reason.
+# `YmerNode.References.CacheTest` calls `YmerNode.References.Cache.reconcile/0`.
+config :ymer_node, YmerNode.References.Cache.Reconcile, enabled: false

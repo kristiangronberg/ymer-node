@@ -38,7 +38,7 @@ defmodule YmerNode.Scripts.Script do
   earlier — the compiler derived the name, hashed the code and read the
   callbacks — so the changeset is a backstop against a bug in this codebase
   rather than against a caller. The checks that matter to a caller live
-  upstream, in the compiler's parse and in acceptance's five refusals
+  upstream, in the compiler's parse and in acceptance's six refusals
   (`YmerNode.Scripts`).
   """
   use Ecto.Schema
@@ -54,7 +54,7 @@ defmodule YmerNode.Scripts.Script do
   @typedoc """
   Which door a script row arrived through — `authored` (an MCP write),
   `imported` (the CLI), `synced` (registry sync, later), `shipped` (the build:
-  the example script, planted on a fresh node database by a migration).
+  an example script, planted on a fresh node database by its own migration).
 
   Provenance, never permission: what a row may do is decided by `accepted?/1`,
   and this only records how it got here. It is a plain string rather than an

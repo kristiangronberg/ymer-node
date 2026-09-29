@@ -13,7 +13,7 @@ defmodule YmerNode.Scripts do
   the whole security claim: code that changed after it was accepted is code
   nobody accepted, so the node stops rather than running it. Today every door
   that writes code also accepts it in the same breath — an authored script, an
-  imported one and the example the build plants are each a deliberate act by
+  imported one and the examples the build plants are each a deliberate act by
   someone who read the code — and the unaccepted state exists for the door that
   does not exist yet, registry sync, where code arrives from elsewhere and no
   one here has looked at it.
@@ -53,7 +53,7 @@ defmodule YmerNode.Scripts do
 
   ## What acceptance refuses
 
-  Five things, and where each is refused:
+  Six things, and where each is refused:
 
   | refusal | where |
   | --- | --- |
@@ -61,25 +61,26 @@ defmodule YmerNode.Scripts do
   | a `url_action` whose schema has no `url` property | `YmerNode.Scripts.Compiler`, at every compile |
   | a name in `web`, `file` or `other` | here, **before** the compile |
   | a host another accepted script already claims | here, after the compile — inside the loader's message at every write door, in the open at the build's |
+  | a web fallback while another accepted script is the web fallback | here, beside the host rule and wherever it runs |
   | a throttle another accepted script declares with other parameters | here, beside the host rule and wherever it runs |
 
   The first two are properties of the code alone, so the compiler settles them
-  before a row exists and no write can get past them. The last three depend on
+  before a row exists and no write can get past them. The last four depend on
   what *else* is in the database — the references vocabulary and the other
-  accepted rows — which the compiler cannot see. All five are checked at every
+  accepted rows — which the compiler cannot see. All six are checked at every
   acceptance door: `create/1`, `update/2`, `import/1` and `accept/1` — and at
   `check/1`, which promises every refusal `create/1` would give. The build's
-  door, `plant_example/0`, checks the host and throttle rules and not the
+  door, `plant_example/1`, checks the host, fallback and throttle rules and not the
   name's: its name is derived from a file this repo ships, never from code
   arriving from outside.
 
-  Where each of the last three sits is load-bearing rather than tidy. Compiling
+  Where each of the last four sits is load-bearing rather than tidy. Compiling
   `Script.X` replaces whatever `Script.X` this VM is running, so a refusal taken
   *after* the compile has already displaced a live script for as long as it
   takes to put it back. Everything readable off the derived name therefore goes
   first — the reserved-name rule, and `create/1`'s own "that name is taken" —
   which is what stops a create from ever reaching the compiler under a name that
-  belongs to another script. Only the host and throttle rules need the compiled
+  belongs to another script. Only the host, fallback and throttle rules need the compiled
   module, and only they are answered afterwards — and they are answered, with
   the row write behind them, **inside the loader's own message**, as the commit
   `YmerNode.Scripts.Loader.load/2` runs between the compile and the recording of
@@ -88,7 +89,7 @@ defmodule YmerNode.Scripts do
   put back, and the second of two writes claiming one host reads the first's
   row rather than racing it. The row itself is read again inside that message,
   so the name rule and the module rule the door answered from a pre-image are
-  answered once more from the row as it stands. `check/1` answers the host and
+  answered once more from the row as it stands. `check/1` answers the host, fallback and
   throttle rules too, but after the loader has answered and put the stored code
   back — an advisory read, like its `existing` flag: it stores nothing, so a
   stale answer costs nothing but the refused write it failed to predict.
@@ -97,6 +98,9 @@ defmodule YmerNode.Scripts do
   the first claiming script by name. Two scripts claiming one host would still
   give a stable answer, but a silently-losing script is worse than a refused
   one: its author would watch references resolve elsewhere with nothing to read.
+  The fallback rule exists for the same reason: the web fallback serves every
+  page no host claim takes (`YmerNode.References.Sources`), and a second one
+  would lose every such page to the first without a word.
 
   The throttle rule exists because a throttle is one process per name
   (`YmerNode.Scripts.Throttle`), and every request hands it the parameters of
@@ -142,14 +146,14 @@ defmodule YmerNode.Scripts do
   ## Design decisions
 
   - **A write compiles before it lands, always.** `create/1`, `update/2`,
-    `import/1` and `plant_example/0` compile the code before touching the
+    `import/1` and `plant_example/1` compile the code before touching the
     database, so a row the node holds has compiled at least once on this node
     and the caller's error is a diagnostic rather than a row that never runs.
   - **Exactly one compile per call, through the loader.** The loader compiles and
     records the facts in one message, so the write path never compiles a second
     time to learn what it already knows — script code runs once per write, not
     twice.
-  - **The far side of the compile is the loader's message too.** The host and
+  - **The far side of the compile is the loader's message too.** The host, fallback and
     throttle rules and the row write are handed to
     `YmerNode.Scripts.Loader.load/2` as its `commit:`, and a remove's row
     delete to `unload/3`'s, so compile, refusal and store — and purge and
@@ -211,13 +215,13 @@ defmodule YmerNode.Scripts do
     round-trips through JSON, so what goes in atom-keyed comes back string-keyed;
     writing the string form is what makes a freshly-inserted row and a re-read
     one the same shape, and the references seam reads exactly one of them.
-  - **`plant_example/0` compiles outside the loader, and it is the only write
-    that does.** It runs inside the migration that plants the example script,
+  - **`plant_example/1` compiles outside the loader, and it is the only write
+    that does.** It runs inside the migration that plants an example script,
     before `YmerNode.Scripts.Loader` exists; nothing else runs then — no live
     tree to displace, no run to refuse — and the loader compiles the row with
     every other accepted one a moment later at the same boot. What the loader's
     message buys the other doors, it does not need; what acceptance refuses, it
-    refuses like them: the host and throttle rules read the accepted rows, and
+    refuses like them: the host, fallback and throttle rules read the accepted rows, and
     the build's example is refused where an operator's own script already
     claims its host.
   """
@@ -234,12 +238,12 @@ defmodule YmerNode.Scripts do
   # ─── Runtime configuration ──────────────────────────────────────────
 
   @doc """
-  Whether the migration that plants the example script plants at all
+  Whether the migrations that plant the example scripts plant at all
   (`config :ymer_node, YmerNode.Scripts, :plant_example`).
 
   Defaults to enabled. `config/test.exs` turns it off, so a test database never
   holds a row no case wrote and a listing a case asserts on starts empty;
-  `YmerNode.ScriptsTest` calls `plant_example/0` itself.
+  `YmerNode.ScriptsTest` calls `plant_example/1` itself.
   """
   def plant_example? do
     :ymer_node
@@ -303,7 +307,7 @@ defmodule YmerNode.Scripts do
   The compile itself goes through `YmerNode.Scripts.Loader`, which compiles the
   candidate and puts the stored code back as one operation — reading the row for
   that restore itself. This module reads the row for `existing` and for the
-  module rule a replace would apply, and answers the host and throttle rules
+  module rule a replace would apply, and answers the host, fallback and throttle rules
   after the loader has restored; all of it is advisory: a check racing a write
   of the same name can answer a flag or a refusal that is already out of date,
   which costs its caller one refused write. The restore is what must not race,
@@ -360,9 +364,13 @@ defmodule YmerNode.Scripts do
   def import(code) when is_binary(code), do: write(code, :import)
 
   @doc """
-  Plants the example script the image ships as an accepted row — the build's
-  door, origin `shipped` — unless a row of its name is already here, which is
-  then answered untouched: an operator's own copy is never overwritten.
+  Plants one example script the image ships — `file` is its basename under
+  `priv/scripts`, `"hex.exs"` — as an accepted row: the build's door, origin
+  `shipped`. A row of its name already here is answered untouched: an
+  operator's own copy is never overwritten. Each example script has a
+  migration of its own that calls this, because a recorded migration never
+  runs again and an install that already has one example gets the next only
+  through the next migration.
 
   The one write that compiles outside `YmerNode.Scripts.Loader`. It runs inside
   the migration that calls it, before the loader exists, and nothing else runs
@@ -370,23 +378,25 @@ defmodule YmerNode.Scripts do
   the loader compiles every accepted row a moment later at the same boot. The
   tree is purged as soon as the metadata is read, so the loader meets the VM as
   it would have without this. What acceptance refuses, this door refuses too:
-  the host and throttle rules read the accepted rows, not the loader, and run
-  here in the open between the compile and the row.
+  the host, fallback and throttle rules read the accepted rows, not the loader,
+  and run here in the open between the compile and the row.
 
   `{:error, {:host_claimed, detail}}` is the refusal every write door gives when
-  an accepted script already claims a host the example declares — here, an
-  operator's own script, written before this build arrived, which is a choice
-  this build has no business overriding: the migration plants nothing, says so,
-  and records itself all the same, so that install never gets the example from
-  a boot. Any other `{:error, {reason, detail}}` is a shipped file that does not
+  an accepted script already claims a host the example declares, and
+  `{:error, {:fallback_claimed, detail}}` the one it gives when the example is
+  the web fallback and an accepted script already is — here, an operator's own
+  script, written before this build arrived, which is a choice this build has no
+  business overriding: the migration plants nothing, says so, and records
+  itself all the same, so that install never gets the example from a boot. Any
+  other `{:error, {reason, detail}}` is a shipped file that does not
   compile as a script — a build's defect, which the suite compiling those bytes
   exists to catch before any image carries them. An `{:error, changeset}` from
   the row write is this codebase's own bug — the compiler produced every value
   the changeset checks — and the migration lets it crash the boot loudly rather
   than naming a next step nobody has.
   """
-  def plant_example do
-    code = File.read!(example_path())
+  def plant_example(file) when is_binary(file) do
+    code = File.read!(example_path(file))
 
     with {:ok, parsed} <- Compiler.parse(code) do
       case Repo.get_by(Script, name: parsed.name) do
@@ -396,8 +406,9 @@ defmodule YmerNode.Scripts do
     end
   end
 
-  @doc "Where the example script sits in this build."
-  def example_path, do: Application.app_dir(:ymer_node, "priv/scripts/hex.exs")
+  @doc "Where one example script sits in this build, by its basename."
+  def example_path(file) when is_binary(file),
+    do: Application.app_dir(:ymer_node, Path.join("priv/scripts", file))
 
   # The purge is unconditional because the compile loads the tree before it can
   # still refuse: `Compiler.compile/1` checks the contract, the callbacks and
@@ -449,7 +460,7 @@ defmodule YmerNode.Scripts do
   end
 
   # The write's far side (`accept_and_store/4`) for the code a row already
-  # holds: the host and throttle rules, then the acceptance itself.
+  # holds: the host, fallback and throttle rules, then the acceptance itself.
   defp accept_stored(compiled, %Script{} = script) do
     with :ok <- check_claims(compiled) do
       script
@@ -538,7 +549,7 @@ defmodule YmerNode.Scripts do
     end
   end
 
-  # The far side of the compile, run inside the loader's message: the host and
+  # The far side of the compile, run inside the loader's message: the host, fallback and
   # throttle rules need the compiled declarations, and the row write has to land
   # before the loader answers anyone else — a second write reading the accepted
   # rows, or a run asking for this name's module. A refusal here leaves a
@@ -601,7 +612,9 @@ defmodule YmerNode.Scripts do
       "hosts" => declarations.hosts,
       "url_action" => declarations.url_action && Atom.to_string(declarations.url_action),
       "secrets" => declarations.secrets,
-      "throttles" => row_throttles(declarations.throttles)
+      "throttles" => row_throttles(declarations.throttles),
+      "cache" => Atom.to_string(declarations.cache),
+      "web_fallback" => declarations.web_fallback
     }
   end
 
@@ -696,11 +709,28 @@ defmodule YmerNode.Scripts do
         do: {host, other}
   end
 
-  # Both rules that read the other accepted rows, in the order a refusal names
-  # them: a claimed host first, then a throttle declared with other parameters.
+  # The rules that read the other accepted rows, in the order a refusal names
+  # them: a claimed host first, then a second web fallback, then a throttle
+  # declared with other parameters.
   defp check_claims(compiled) do
-    with :ok <- check_hosts(compiled.name, compiled.declarations.hosts) do
+    with :ok <- check_hosts(compiled.name, compiled.declarations.hosts),
+         :ok <- check_fallback(compiled.name, compiled.declarations.web_fallback) do
       check_throttles(compiled.name, compiled.declarations.throttles)
+    end
+  end
+
+  # The seam's own read again, as the host rule reads it: only an accepted row
+  # can hold the fallback, and a script replacing its own code is never its own
+  # rival.
+  defp check_fallback(_name, false), do: :ok
+
+  defp check_fallback(name, true) do
+    case Enum.find(Sources.declarations(), &(&1.web_fallback and &1.name != name)) do
+      nil ->
+        :ok
+
+      %{name: by} ->
+        {:error, {:fallback_claimed, "the accepted script #{by} is already the web fallback"}}
     end
   end
 

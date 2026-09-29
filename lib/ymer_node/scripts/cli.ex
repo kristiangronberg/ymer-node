@@ -432,8 +432,7 @@ defmodule YmerNode.Scripts.CLI do
   defp schedule_lines(schedule) do
     Enum.join(
       [
-        "#{schedule.state}  #{schedule.name}  #{schedule.script} #{schedule.action} " <>
-          JSON.encode!(schedule.args),
+        "#{schedule.state}  #{schedule.name}  " <> subject_text(schedule),
         "    #{schedule.cron_expression}  next #{schedule.next_firing || "none"}  " <>
           "ends #{schedule.ends_at}",
         "    " <> last_run_text(schedule.last_run)
@@ -441,6 +440,13 @@ defmodule YmerNode.Scripts.CLI do
       "\n"
     )
   end
+
+  # A watch runs no script of its own: it keeps a reference's cache entry
+  # current, and names the reference in place of a script and its args.
+  defp subject_text(%{watch: %{reference: id}}), do: "watch on reference #{id}"
+
+  defp subject_text(schedule),
+    do: "#{schedule.script} #{schedule.action} " <> JSON.encode!(schedule.args)
 
   defp last_run_text(nil), do: "no run yet"
 

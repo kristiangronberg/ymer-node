@@ -29,6 +29,11 @@ services:
       # never backs it up. Keep it inside the /data mount, or the host will
       # not see it.
       FILES_PATH: /data/files
+      # The cache directory: where a reference's cache entry lives when its
+      # script stores files. The node's, not yours — rebuilt with the node
+      # database, never backed up. Keep it inside the /data mount and outside
+      # the files directory; a path inside that one refuses boot.
+      CACHE_PATH: /data/cache
       # Bind the app inside the container to the same port published below, so
       # the two always agree even when PORT is set in the shell rather than in
       # .env. This does NOT widen the bind — the host side is hardcoded to

@@ -33,6 +33,18 @@ defmodule YmerNode.ApplicationTest do
       assert position(YmerNode.Scripts.Loader) < position(:listener)
     end
 
+    @tag doc: """
+         The reconcile reads the cache entries the migrator builds, and removes
+         the files no entry names — so it has to run after the migrator and
+         finish before the loader, the first child that can start a run which
+         writes one. A failure means a boot reading a table nothing has
+         created, or one removing a file a run is still writing.
+         """
+    test "the cache reconcile runs after the migrator and before the loader" do
+      assert position(:migrator) < position(YmerNode.References.Cache.Reconcile)
+      assert position(YmerNode.References.Cache.Reconcile) < position(YmerNode.Scripts.Loader)
+    end
+
     test "the runner's process registry and task supervisor are in the tree" do
       assert YmerNode.Scripts.Runs in names()
       assert YmerNode.Scripts.TaskSupervisor in names()
@@ -51,14 +63,14 @@ defmodule YmerNode.ApplicationTest do
     end
 
     @tag doc: """
-         The migration that plants the example script compiles it, and the
+         The migrations that plant the example scripts compile them, and the
          compiler runs every compile under the task supervisor, so the
          supervisor has to exist before the migrator runs. A failure means a
-         fresh node database's first boot dies inside that migration with a
+         fresh node database's first boot dies inside such a migration with a
          `:noproc` exit — which nothing else in the suite reaches, because the
          test configuration turns the planting off.
          """
-    test "the task supervisor sits before the migrator that plants the example script" do
+    test "the task supervisor sits before the migrator that plants the example scripts" do
       assert position(YmerNode.Scripts.TaskSupervisor) < position(:migrator)
     end
 
@@ -100,6 +112,7 @@ defmodule YmerNode.ApplicationTest do
       for name <- [
             :migrator,
             :listener,
+            YmerNode.References.Cache.Reconcile,
             YmerNode.Scripts.Loader,
             YmerNode.Notebook.Repo,
             YmerNode.Notebook.Backup.Lock,

@@ -1,7 +1,9 @@
 defmodule YmerNode.Mcp.Tools.References.ActionsTest do
   @moduledoc """
-  Exercises the six actions end-to-end through the repo, so `YmerNode.DataCase`
-  and no async flag.
+  Exercises the six registry actions end-to-end through the repo, so
+  `YmerNode.DataCase` and no async flag. The cache's four — `read`, `refresh`,
+  `watch` and `unwatch` — run scripts, and are
+  `YmerNode.Mcp.Tools.References.CacheActionsTest`'s.
 
   Only built-in sources appear here, because `Sources.declarations/0` answers the
   empty list until script rows exist. The declared-source half — a script's name

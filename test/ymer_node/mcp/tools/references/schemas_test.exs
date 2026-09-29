@@ -12,9 +12,9 @@ defmodule YmerNode.Mcp.Tools.References.SchemasTest do
 
   alias YmerNode.Mcp.Tools.References.Schemas
 
-  test "defines exactly the six actions" do
+  test "defines exactly the ten actions" do
     assert Enum.sort(Map.keys(Schemas.all())) ==
-             Enum.sort(~w(find add get update remove list)a)
+             Enum.sort(~w(find add get update remove list read refresh watch unwatch)a)
   end
 
   test "required params per action" do
@@ -26,6 +26,17 @@ defmodule YmerNode.Mcp.Tools.References.SchemasTest do
     assert all.remove.required == ["id"]
     assert all.find.required == []
     assert all.list.required == []
+    assert all.read.required == ["id"]
+    assert all.refresh.required == ["id"]
+    assert all.watch.required == ["id", "cadence_minutes", "lifetime_hours"]
+    assert all.unwatch.required == ["id"]
+  end
+
+  test "the watch schema names the four cadences and bounds the lifetime" do
+    watch = Schemas.all().watch.properties
+
+    assert watch["cadence_minutes"]["enum"] == [5, 15, 30, 60]
+    assert {watch["lifetime_hours"]["minimum"], watch["lifetime_hours"]["maximum"]} == {1, 12}
   end
 
   @tag doc: """

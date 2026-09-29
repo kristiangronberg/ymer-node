@@ -5,7 +5,9 @@ defmodule YmerNode.Schedules.LastRun do
   run took. Nothing before it — there is no run history, and a skipped firing
   leaves no trace — because the node is a script runner, not a reliable
   scheduler. What a script produces goes where the script puts it; anything it
-  wants kept beyond one line, it writes to the notebook.
+  wants kept beyond one line, it writes to the notebook. A watch's firing is the
+  one whose answer is kept, and the cache keeps it
+  (`YmerNode.References.Cache`), not this row.
 
   The outcome answers "did it work, and whose move is it" in one word, grouping
   the reasons `YmerNode.Scripts.Runner` tabulates:
@@ -13,13 +15,17 @@ defmodule YmerNode.Schedules.LastRun do
   | outcome | reasons | whose move |
   | --- | --- | --- |
   | `ok` | — | nobody's |
-  | `refused` | `:not_found`, `:not_accepted`, `:not_loaded`, `:unknown_action`, `:invalid_schema`, `:invalid_args` | the run never started: fix the schedule, or accept the script |
-  | `error` | `:script_error`, `:script_raised`, `:script_exited`, `:bad_return`, `:result_not_encodable` | the script ran and failed: fix the script |
+  | `refused` | `:not_found`, `:not_accepted`, `:not_loaded`, `:unknown_action`, `:invalid_schema`, `:invalid_args`, `:no_recipe`, `:reference_changed` | the run never started, or its answer was not kept: fix the schedule, or accept the script |
+  | `error` | `:script_error`, `:script_raised`, `:script_exited`, `:bad_return`, `:result_not_encodable`, `:not_cache_contract`, `:not_text` | the script ran and failed: fix the script |
   | `timeout` | `:timeout` | the run passed its deadline and was killed |
 
-  `:not_found` is the one reason that is not the runner's: the script's row gone
-  between a firing and its run. A script's schedules are deleted with it, so only
-  that window can see it.
+  `:not_found` is not the runner's: the script's row gone between a firing and
+  its run, or a watch's reference gone the same way. A script's schedules and a
+  reference's watch are deleted with them, so only that window can see it.
+  `:no_recipe` is a watch's firing that found no script to fetch its reference,
+  `:reference_changed` one whose reference was moved or removed while its run
+  was in flight, so the answer was not kept, and `:not_cache_contract` and
+  `:not_text` are the cache refusing what a watch's script answered.
 
   The message is the runner's rendered text, cut short at a fixed length: it is
   a line to read in a listing, not a log.
@@ -31,7 +37,9 @@ defmodule YmerNode.Schedules.LastRun do
     :not_loaded,
     :unknown_action,
     :invalid_schema,
-    :invalid_args
+    :invalid_args,
+    :no_recipe,
+    :reference_changed
   ]
   @message_limit 500
 

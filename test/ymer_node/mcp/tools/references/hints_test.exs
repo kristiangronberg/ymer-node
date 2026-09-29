@@ -23,10 +23,9 @@ defmodule YmerNode.Mcp.Tools.References.HintsTest do
     assert hint.example == %{data: %{id: 7}}
   end
 
-  test "read actions and unknown contexts emit no hints" do
-    assert Hints.for(:find, %{}) == []
-    assert Hints.for(:list, %{}) == []
-    assert Hints.for(:get, %{id: 7}) == []
-    assert Hints.for(:remove, %{}) == []
+  test "every action but add and update emits no hints" do
+    for action <- [:find, :list, :get, :remove, :read, :refresh, :watch, :unwatch] do
+      assert Hints.for(action, %{id: 7}) == [], inspect(action)
+    end
   end
 end

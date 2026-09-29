@@ -4,7 +4,7 @@ defmodule YmerNode.MixProject do
   def project do
     [
       app: :ymer_node,
-      version: "0.4.0",
+      version: "0.5.0",
       elixir: "~> 1.19",
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
@@ -123,7 +123,7 @@ defmodule YmerNode.MixProject do
       # `:iana_version` — and move the Dockerfile's `COPY priv` above its
       # `mix deps.compile`, which today runs first.
       {:tz, "~> 0.28.2"},
-      {:wymcp, "~> 0.8.4"},
+      {:wymcp, "~> 0.8.7"},
       {:xlsx_reader, "~> 0.8.12"}
     ]
   end

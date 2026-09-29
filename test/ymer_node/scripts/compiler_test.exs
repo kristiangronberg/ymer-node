@@ -122,7 +122,16 @@ defmodule YmerNode.Scripts.CompilerTest do
       assert compiled.modules == [fixture.module]
       assert compiled.contract == YmerNode.Script.contract()
       assert compiled.description == "a fixture script"
-      assert compiled.declarations == %{hosts: [], url_action: nil, secrets: [], throttles: %{}}
+
+      assert compiled.declarations == %{
+               hosts: [],
+               url_action: nil,
+               secrets: [],
+               throttles: %{},
+               cache: :text,
+               web_fallback: false
+             }
+
       assert compiled.warnings == []
     end
 
@@ -299,7 +308,9 @@ defmodule YmerNode.Scripts.CompilerTest do
                hosts: ["example.test"],
                url_action: :fetch,
                secrets: [],
-               throttles: %{}
+               throttles: %{},
+               cache: :text,
+               web_fallback: false
              }
     end
 
@@ -325,6 +336,44 @@ defmodule YmerNode.Scripts.CompilerTest do
 
       assert {:ok, plain} = compile_fixture(fixture())
       assert plain.declarations.throttles == %{}
+    end
+
+    test "reads the cache mode and the web fallback mark, text and neither when left out" do
+      assert {:ok, plain} = compile_fixture(fixture())
+      assert plain.declarations.cache == :text
+      assert plain.declarations.web_fallback == false
+
+      extra = ", fetch: %{description: \"f\", properties: %{\"url\" => %{}}, write: false}"
+
+      declarations =
+        "%{hosts: [], url_action: :fetch, secrets: [], cache: :file, web_fallback: true}"
+
+      assert {:ok, compiled} =
+               compile_fixture(fixture(body: with_declarations(declarations, extra)))
+
+      assert compiled.declarations.cache == :file
+      assert compiled.declarations.web_fallback == true
+    end
+
+    test "refuses a cache mode other than :text or :file" do
+      body = with_declarations("%{hosts: [], url_action: nil, secrets: [], cache: :blob}")
+
+      assert {:error, {:invalid_declarations, detail}} = compile_fixture(fixture(body: body))
+      assert detail =~ ":cache must be :text or :file, got :blob"
+    end
+
+    test "refuses a web fallback mark that is not a boolean" do
+      body = with_declarations("%{hosts: [], url_action: nil, secrets: [], web_fallback: :yes}")
+
+      assert {:error, {:invalid_declarations, detail}} = compile_fixture(fixture(body: body))
+      assert detail =~ ":web_fallback must be true or false, got :yes"
+    end
+
+    test "refuses a web fallback with no url_action to run" do
+      body = with_declarations("%{hosts: [], url_action: nil, secrets: [], web_fallback: true}")
+
+      assert {:error, {:invalid_declarations, detail}} = compile_fixture(fixture(body: body))
+      assert detail =~ ":web_fallback needs a :url_action"
     end
 
     test "refuses throttles that break the grammar, naming the broken rule" do

@@ -1,21 +1,49 @@
 defmodule YmerNode.References do
   @moduledoc """
   The registry of pointers at where knowledge lives, served to LLM workers as
-  the `references` tool; it holds references, never copies of what they point at
-  (the membrane).
+  the `references` tool, and beside it the cache of what their targets say —
+  § The membrane is the rule between the two.
 
   ## The membrane
 
-  A reference is a pointer, never content. The registry records where knowledge
-  lives and when to look — a title, the uri that is both identity and deep link,
-  and a description that is local routing knowledge — and it never records what
-  the target says. A worker that has found a reference calls the target's own
-  tool for the live content; this node does not fetch, and copying a target's
-  text into a description defeats the whole arrangement, because the copy goes
-  stale the moment the target moves on and nothing here will ever notice.
+  A reference is a pointer, never content. Its row records where knowledge
+  lives and when to look — a title, the uri that is both identity and deep
+  link, and a description that is local routing knowledge — and never what
+  the target says. What the target says lives only in the cache: fetched by
+  a script, never by the node itself; a mirror that may be behind the
+  remote and is never ahead of it; stamped with when it was fetched and
+  last checked; never pasted into a description, and never replicated to
+  ymer. A copy in a description goes stale unseen. A cache entry says its
+  age.
 
   That is the rule the node inherits along with the registry, and it is why
-  `remove` is a hard delete: a pointer has no history worth preserving.
+  `remove` is a hard delete: a pointer has no history worth preserving, and
+  its cache entry goes with it, content the target can always fill again.
+  The cache itself is `YmerNode.References.Cache`.
+
+  ## The schemas
+
+  ```mermaid
+  erDiagram
+      REFERENCE ||--o| CACHE_ENTRY : "cached as"
+      REFERENCE {
+          integer id PK
+          string title
+          string uri
+          string fragment
+      }
+      CACHE_ENTRY {
+          integer id PK
+          integer reference_id FK
+          string script
+          string format
+          text body
+          string path
+          string reference_validator
+          datetime fetched_at
+          datetime checked_at
+      }
+  ```
 
   ## Coordination
 
@@ -29,18 +57,23 @@ defmodule YmerNode.References do
           Reference[Reference schema]
           Sources
           Search
+          Cache
       end
 
       subgraph external
           Repo[(YmerNode.Repo)]
+          Scripts[YmerNode.Scripts]
       end
 
       R --> Reference
       R -->|"source filter"| Sources
       R -->|"find_references/1"| Search
+      R -->|"drop on a moved uri, and on remove"| Cache
       R --> Repo
       Search -->|"list_classified/1"| R
       Search -->|"search_text/1"| Reference
+      Cache -->|"the recipe"| Sources
+      Cache -->|"run/3 on the URL action"| Scripts
   ```
 
   The `Search --> R` back-edge is deliberate and runtime-only — a `defdelegate`
@@ -71,11 +104,15 @@ defmodule YmerNode.References do
   - No broadcast and no subscription. The node has no UI, so there is no open
     list to keep live; the tool call that mutates a reference is also the one
     that reports it.
+  - A changed `uri` or `fragment` drops the cache entry. An entry fetched for
+    the old target and served under a fresh stamp for the new one is the lie
+    the membrane exists to prevent; the next read fetches the new target. A
+    change to the title, description or tags keeps it.
   """
 
   import Ecto.Query, warn: false
 
-  alias YmerNode.References.{Reference, Sources}
+  alias YmerNode.References.{Cache, Reference, Sources}
   alias YmerNode.Repo
 
   @doc """
@@ -163,25 +200,40 @@ defmodule YmerNode.References do
   out from under it raises `Ecto.StaleEntryError`, which degrades to
   `{:error, :not_found}` — the tool layer holds a `%Reference{}` across the
   window between reading it and writing it back.
+
+  An update that moves the `uri` or the `fragment` drops the reference's cache
+  entry, so the next read fetches the target the reference now names.
   """
   def update_reference(%Reference{} = reference, attrs) when is_map(attrs) do
-    reference |> Reference.changeset(attrs) |> Repo.update()
+    with {:ok, updated} <- reference |> Reference.changeset(attrs) |> Repo.update() do
+      if moved?(reference, updated), do: Cache.drop(updated.id)
+      {:ok, updated}
+    end
   rescue
     Ecto.StaleEntryError -> {:error, :not_found}
   end
 
   @doc """
-  Permanently deletes a reference — a pointer, not content, with no rows
-  pointing at it.
+  Permanently deletes a reference, and its cache entry and that entry's file
+  with it; the database takes the reference's watch.
 
   Uses a conditional `Repo.delete_all` rather than a bare-struct `Repo.delete`,
   so a double delete degrades to `{:error, :not_found}` instead of raising
-  `Ecto.StaleEntryError`.
+  `Ecto.StaleEntryError`. The database's cascade takes the cache entry; its
+  file, which is not the database's to remove, is named before the delete and
+  removed after it — so a fetch still running cannot put an entry back
+  between the two.
   """
   def delete_reference(%Reference{} = reference) do
+    file = Cache.file_of(reference.id)
+
     case Repo.delete_all(from r in Reference, where: r.id == ^reference.id) do
-      {1, _} -> {:ok, reference}
-      {0, _} -> {:error, :not_found}
+      {1, _} ->
+        Cache.discard_file(file)
+        {:ok, reference}
+
+      {0, _} ->
+        {:error, :not_found}
     end
   end
 
@@ -228,6 +280,9 @@ defmodule YmerNode.References do
       :error -> {:error, :not_found}
     end
   end
+
+  defp moved?(reference, updated),
+    do: reference.uri != updated.uri or reference.fragment != updated.fragment
 
   # Tag-AND: one json_each membership EXISTS per required tag.
   defp apply_tags(query, tags) when tags in [nil, []], do: query

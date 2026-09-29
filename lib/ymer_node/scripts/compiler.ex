@@ -449,13 +449,17 @@ defmodule YmerNode.Scripts.Compiler do
        when is_list(hosts) and is_list(secrets) and (is_atom(url_action) or is_nil(url_action)) do
     with :ok <- check_strings(hosts, ":hosts must be a list of strings"),
          :ok <- check_strings(secrets, ":secrets must be a list of strings"),
-         {:ok, throttles} <- normalise_throttles(Map.get(given, :throttles, %{})) do
+         {:ok, throttles} <- normalise_throttles(Map.get(given, :throttles, %{})),
+         {:ok, cache} <- normalise_cache(Map.get(given, :cache, :text)),
+         {:ok, web_fallback} <- normalise_web_fallback(Map.get(given, :web_fallback, false)) do
       {:ok,
        %{
          hosts: Enum.map(hosts, &String.downcase/1),
          url_action: url_action,
          secrets: secrets,
-         throttles: throttles
+         throttles: throttles,
+         cache: cache,
+         web_fallback: web_fallback
        }}
     end
   end
@@ -465,6 +469,22 @@ defmodule YmerNode.Scripts.Compiler do
      {:invalid_declarations,
       "declarations/0 must answer %{hosts: [...], url_action: atom | nil, secrets: [...]}, " <>
         "got #{inspect(other)}"}}
+  end
+
+  # Where the cache keeps what the URL action answers, and whether the script
+  # serves the `web` source's unclaimed hosts. A script that names neither
+  # stores text and backs no source, so every script written before either key
+  # existed keeps the meaning it had.
+  defp normalise_cache(cache) when cache in [:text, :file], do: {:ok, cache}
+
+  defp normalise_cache(other),
+    do: {:error, {:invalid_declarations, ":cache must be :text or :file, got #{inspect(other)}"}}
+
+  defp normalise_web_fallback(web_fallback) when is_boolean(web_fallback), do: {:ok, web_fallback}
+
+  defp normalise_web_fallback(other) do
+    {:error,
+     {:invalid_declarations, ":web_fallback must be true or false, got #{inspect(other)}"}}
   end
 
   defp check_strings(values, rule) do
@@ -543,9 +563,13 @@ defmodule YmerNode.Scripts.Compiler do
     do:
       "throttle #{name}: :breaker must be a map of :threshold and :cooldown, got #{inspect(other)}"
 
-  # A host claim with no action to run is a claim on nothing; an action that
-  # takes no `url` cannot be handed a reference's uri. Both are refused here
-  # rather than at acceptance, because both are facts about the code alone.
+  # A host claim with no action to run is a claim on nothing, and so is a web
+  # fallback; an action that takes no `url` cannot be handed a reference's uri.
+  # All three are refused here rather than at acceptance, because all three are
+  # facts about the code alone.
+  defp check_url_action(%{url_action: nil, web_fallback: true}, _actions),
+    do: {:error, {:invalid_declarations, ":web_fallback needs a :url_action to hand a page to"}}
+
   defp check_url_action(%{url_action: nil, hosts: []}, _actions), do: :ok
 
   defp check_url_action(%{url_action: nil, hosts: [_ | _]}, _actions),

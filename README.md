@@ -4,7 +4,7 @@ Ymer Node is the local half of Ymer: a headless MCP server you run on your own
 machine, giving an LLM that works with you capability that has to live where you
 are. Today that is a notebook — a private SQL store with vector search, which the
 LLM creates its own tables in — and a registry of references to where knowledge
-lives. Neither leaves this machine.
+lives, with a cache of what they say. None of it leaves this machine.
 
 The other half is ymer, the hosted side, which holds the tasks, projects and
 documents any client can reach from anywhere. Neither replaces the other, and the
@@ -97,8 +97,11 @@ does but whether you meant to accept it. The other tools reach nothing but this
 machine's own store and the scripts you already accepted.
 
 **Set `schedules` to ask as well.** A schedule runs an accepted script's action
-with nobody watching, for up to 90 days, so adding one is the other decision
-worth your attention: which action, how often, and for how long.
+unattended, for up to 90 days, so adding one is the other decision worth your
+attention: which action, how often, and for how long. `references` runs
+scripts too — reading a reference with nothing cached, or refreshing one, runs
+its script's URL action, and `watch` keeps that running for up to 12 hours —
+so set it to ask if each of those should be your call.
 
 The operator's verbs run on the machine itself, and are the door for anything
 that should not travel through a model's context:
@@ -159,6 +162,14 @@ the same script works on every node. `FILES_PATH` names it in the compose file
 as `DATABASES_PATH` names the databases' directory, `/data/files`, and it
 stays inside the mount. The files are yours, not the node's: it creates the
 directory at boot and never backs it up.
+
+Beside them sits `data/cache/`, the cache directory: where the references
+cache keeps what a script fetched as a file — a page, an image, a document.
+It is the node's, not yours, and rebuilt with `node.db`: every boot removes the
+files no cache entry names, so deleting `node.db` empties it, and a file gone
+from it is fetched again the next time its reference is read. `CACHE_PATH`
+names it, `/data/cache`, inside the mount and never inside the files
+directory — a path there refuses boot.
 
 On a brand-new store the node's first boot logs `database is locked` once while
 its connections race each other to put the fresh file into WAL mode. It is
@@ -227,8 +238,10 @@ import door, so a script the build planted stops reading as the build's.
 
 On the receiving node the session checks the code and creates it — acceptance
 is that node's own — and whoever runs that machine sets the secrets it
-declares. The example script the image ships, `hex`, is already there on a
-fresh install, to be read as much as run; remove it and it stays gone.
+declares. The example scripts the image ships — `hex`, and `webpage`, which
+reads any web page no other script claims as markdown for the references
+cache — are already there on a fresh install, to be read as much as run;
+remove one and it stays gone.
 
 ## The browser service
 
