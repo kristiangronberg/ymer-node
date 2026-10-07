@@ -123,7 +123,7 @@ defmodule YmerNode.MixProject do
       # `:iana_version` — and move the Dockerfile's `COPY priv` above its
       # `mix deps.compile`, which today runs first.
       {:tz, "~> 0.28.2"},
-      {:wymcp, "~> 0.8.7"},
+      {:wymcp, "~> 0.9.0"},
       {:xlsx_reader, "~> 0.8.12"}
     ]
   end
