@@ -94,9 +94,10 @@ defmodule YmerNode.Mcp.Tools.Helpers do
   # `tags: {"is invalid", [type: {:array, :string}, validation: :cast]}` — and
   # that tuple has no `String.Chars` implementation, so the fold raised
   # `Protocol.UndefinedError` on a message ("is invalid") holding no
-  # interpolation at all. Reachable from the wire: the dispatch layer checks a
-  # param's presence and never its type, so `add`/`update` with a non-array
-  # `tags` crashed the call instead of answering "tags: is invalid". A
+  # interpolation at all. It was reachable from the wire while the dispatch
+  # layer checked a param's presence and never its type: `add`/`update` with a
+  # non-array `tags` crashed the call instead of answering "tags: is invalid".
+  # wymcp 0.9.0's value gate now refuses that call before it gets here. A
   # `String.to_existing_atom/1` on the placeholder would trade that raise for
   # an `ArgumentError` on any key the VM holds no atom for, which is why the
   # match is by name and an unmatched placeholder is left as written.

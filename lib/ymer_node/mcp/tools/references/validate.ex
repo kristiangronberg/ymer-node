@@ -71,10 +71,15 @@ defmodule YmerNode.Mcp.Tools.References.Validate do
   @doc """
   Normalizes a limit.
 
-  The declared integer type is advisory — the dispatch gate checks presence, not
-  value type — so a positive numeric string is accepted, and an over-max value
-  CLAMPS to the maximum rather than bouncing. A caller that asks for 500 wants
-  as many as it can have, and refusing the call teaches it nothing it can act on.
+  A positive numeric string is accepted, and an over-max value CLAMPS to the
+  maximum rather than bouncing. A caller that asks for 500 wants as many as it
+  can have, and refusing the call teaches it nothing it can act on.
+
+  Over the wire neither path is reached any more: since wymcp 0.9.0 the value
+  gate enforces the schema's `integer` type and its `minimum`/`maximum` before
+  the action runs, so a numeric string or an over-max limit is refused there.
+  Whether to keep the clamp — by dropping `maximum` from the schema — or
+  delete it is still open.
   """
   def limit(nil), do: {:ok, @default_limit}
   def limit(n) when is_integer(n) and n > 0, do: {:ok, min(n, @max_limit)}
@@ -90,7 +95,8 @@ defmodule YmerNode.Mcp.Tools.References.Validate do
 
   @doc """
   The line a `read` window starts at, from 1 — 1 when absent. A positive
-  numeric string is taken, as `limit/1` takes one.
+  numeric string is taken, as `limit/1` takes one — off the wire only, as
+  there.
   """
   def offset(offset), do: positive(offset, 1, :invalid_offset)
 

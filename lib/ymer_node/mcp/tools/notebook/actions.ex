@@ -4,9 +4,10 @@ defmodule YmerNode.Mcp.Tools.Notebook.Actions do
   (`YmerNode.Mcp.Tools.Notebook`, which calls `run/2`) — a thin boundary over
   `YmerNode.Notebook` and `YmerNode.Notebook.Backup`. This is a trust boundary:
   `sql`, `table` and `id` are guarded `is_binary` in each head because nothing
-  downstream validates them — the MCP dispatch layer checks that a parameter is
-  present but never what type it holds — so `sql` and `table` flow straight into
-  SQLite and `id` flows into filename construction. Each action returns
+  downstream validates them — `sql` and `table` flow straight into SQLite and
+  `id` flows into filename construction. Over the wire, wymcp's value gate
+  refuses a wrong-typed value before `run/2` is reached (since wymcp 0.9.0); the
+  guards are what holds for any caller that reaches `run/2` without the gate. Each action returns
   `{:ok, data, hint_ctx}` or `{:error, {reason, ctx}}` — and, where the error is one
   the caller can act on, `{:error, {reason, ctx}, hint_ctx}`, the three-element form
   that puts a follow-up hint on the error payload rather than only in its prose.
@@ -16,7 +17,9 @@ defmodule YmerNode.Mcp.Tools.Notebook.Actions do
   match. Each guarded head now has an unguarded twin at the bottom of the module
   that answers `{:wrong_type, …}` instead, naming the key, the type wanted and
   what arrived. The guard is still what keeps the bad value out of SQLite and out
-  of filename construction; the twin only makes the refusal readable.
+  of filename construction; the twin only makes the refusal readable. Since
+  wymcp 0.9.0 the value gate answers a wrong-typed call first, so a twin is
+  reached only by a direct `run/2` call.
   """
   alias YmerNode.Mcp.Tools.Helpers
   alias YmerNode.Mcp.Tools.Notebook.Format
