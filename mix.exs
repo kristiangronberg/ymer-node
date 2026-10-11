@@ -4,7 +4,7 @@ defmodule YmerNode.MixProject do
   def project do
     [
       app: :ymer_node,
-      version: "0.5.1",
+      version: "0.6.0",
       elixir: "~> 1.19",
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
@@ -72,19 +72,13 @@ defmodule YmerNode.MixProject do
     [
       {:bandit, "~> 1.12.5"},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
-      {:crontab, "~> 1.2"},
+      {:crontab, "~> 1.2.1"},
       {:ecto_sql, "~> 3.13"},
       {:ecto_sqlite3, "~> 0.25"},
       {:elixlsx, "~> 0.6.0"},
       {:ex_doc, "~> 0.40.4", only: [:dev, :test], runtime: false},
       {:ex_slop, "~> 0.4.5", only: [:dev, :test], runtime: false},
       {:floki, "~> 0.38.4"},
-      # Direct although wymcp already locks it transitively: the node validates a
-      # run's arguments against the action's own schema, so jsv is a dependency
-      # the node relies on and therefore names. The alternative — wymcp's
-      # public but undocumented `validate_schema/2` — would bind us to an
-      # internal, which is a different thing from relying on a transitive
-      # requirement the way the :plug comment below describes.
       {:jsv, "~> 0.22"},
       # Markdown a script turns into what a system accepts — HTML, or a tree a
       # renderer walks into a wiki's markup. A NIF: the build downloads its
@@ -123,7 +117,7 @@ defmodule YmerNode.MixProject do
       # `:iana_version` — and move the Dockerfile's `COPY priv` above its
       # `mix deps.compile`, which today runs first.
       {:tz, "~> 0.28.2"},
-      {:wymcp, "~> 0.9.0"},
+      {:wymcp, "~> 0.9.1"},
       {:xlsx_reader, "~> 0.8.12"}
     ]
   end

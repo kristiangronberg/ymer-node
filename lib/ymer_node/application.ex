@@ -47,6 +47,11 @@ defmodule YmerNode.Application do
   # `run_tree/0`: a run a firing starts is a run like any other, under the
   # runner's task supervisor.
   #
+  # The messages process comes up just ahead of the listener, for the same
+  # reason the listener is last: it answers every `messages` call. It reads
+  # nothing another child builds, and nothing in a script's run reaches it,
+  # so it does not join `run_tree/0`.
+  #
   # Public, and `@doc false`, ONLY so a test can read the list back — it is the
   # one way to gate a rule about a list. Two tests do: `YmerNode.ApplicationTest`
   # gates the order above, and `YmerNode.ScriptHarnessTest` pins
@@ -71,6 +76,7 @@ defmodule YmerNode.Application do
       YmerNode.Notebook.Backup.Lock,
       {Task.Supervisor, name: YmerNode.Schedules.FiringSupervisor},
       YmerNode.Schedules.Scheduler,
+      YmerNode.Messages,
       mcp_endpoint()
     ]
   end

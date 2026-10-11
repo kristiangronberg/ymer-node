@@ -39,18 +39,17 @@ defmodule YmerNode.Mcp.McpServer do
     - notebook — your own store: create and evolve your own tables, keep
       documents with vector embeddings, and run KNN search. execute = writes
       and DDL, query = read-only SELECT. The same tool saves and rolls the
-      store back: create, list, restore. Reach for a backup before anything
-      destructive, and whenever the user asks.
+      store back: create, list, restore.
     - references — the registry of where knowledge lives: find returns pointers,
       each with a fetch recipe where one is derivable; read serves the content,
       cached by that recipe. Store pointers and routing notes, never content.
-      Until registry sync lands, a reference added here lives only on this
-      machine.
     - scripts — accepted Elixir modules, for systems with no built-in
       support. Read scripts guide before writing one, and scripts info for
       each promised package you use; describe before you run: an action's
       write mark says whether it writes off this machine. script_author
       writes them; schedules runs them unattended.
+    - messages — talk with other sessions on a thread: send, check what is
+      new for your handle, read without moving your read mark.
 
     Ymer Node and ymer are two halves of one product. ymer holds tasks,
     projects, docs and memories — the coordination every client can reach.

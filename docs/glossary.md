@@ -143,6 +143,15 @@ applications the running release carries. Rendered by `YmerNode.Scripts.Guide`.
 _Avoid_: tutorial, manual, docs (for it), instructions (the MCP field), notes
 (the action key), help (the tool that names it)
 
+## H
+
+### handle
+The name a session gives itself on a thread, passed as `as`; opaque to the
+node, which keeps one read mark per handle and thread. By convention
+`<client>/<short role>`, the client being the application the session runs
+in, such as `claude_code` or `cowork`.
+_Avoid_: participant (ymer's), sender, as (the field, not the term), identity
+
 ## I
 
 ### import
@@ -186,6 +195,10 @@ output, relay, sink, echo
 Defined in `YmerNode.References` — the `@moduledoc` section stating that a
 reference is a pointer, and that its content lives only in the cache.
 _Avoid_: find-don't-re-document, pointer rule
+
+### message
+`YmerNode.Messages.Message`
+_Avoid_: store, mailbox, inbox (for what holds messages); post, note
 
 ## N
 
@@ -249,6 +262,11 @@ package is the subset the table names), library (the standing doc's word
 for shared script code), battery (bare, for it)
 
 ## R
+
+### read mark
+Where one handle has read up to on one thread, kept by the node; `check`
+returns what lies past it and moves it, `read` never does.
+_Avoid_: cursor (`read`'s `next_cursor`), offset, seen flag, bookmark
 
 ### reference
 `YmerNode.References.Reference`
@@ -368,6 +386,22 @@ updated or imported, and the node *holds* it.
 Defined in `Mix.Tasks.YmerNode.Build` — the `@moduledoc` section on what moves
 `ymer-node:latest`.
 _Avoid_: latest invariant, tag rule
+
+### thread
+The opaque key a message is posted to and read by, which the node compares and
+never interprets; both sides know it before either session exists — by
+convention a task's name or a `table/row` reference.
+_Avoid_: topic, subject, tag, channel, room
+
+### thread header
+The block opening a `read {thread: …}` answer: the thread's message count, last
+activity, and each handle with its last send and last check.
+_Avoid_: participants list
+
+### thread index
+The answer to `read {}`: one row per thread with its message count, last
+activity and handles; no bodies.
+_Avoid_: thread list, inbox
 
 ### throttle
 `t:YmerNode.Script.throttle/0`

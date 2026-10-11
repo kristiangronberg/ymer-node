@@ -104,6 +104,15 @@ defmodule YmerNode.ApplicationTest do
     end
 
     @tag doc: """
+         The messages process answers every `messages` call, so the listener must
+         not accept one before it is up. A failure means such a call could meet
+         no process and die with a `:noproc` exit.
+         """
+    test "the messages process sits before the listener" do
+      assert position(YmerNode.Messages) < position(:listener)
+    end
+
+    @tag doc: """
          The control for the order cases above: every position they compare has
          to resolve, or a renamed child would make `nil < nil` and the cases
          would pass while guarding nothing.
@@ -118,6 +127,7 @@ defmodule YmerNode.ApplicationTest do
             YmerNode.Notebook.Backup.Lock,
             YmerNode.Schedules.FiringSupervisor,
             YmerNode.Schedules.Scheduler,
+            YmerNode.Messages,
             YmerNode.Scripts.TaskSupervisor,
             YmerNode.Scripts.Throttles,
             YmerNode.Schedules.InFlight,

@@ -94,7 +94,8 @@ accepts it, and the node will run those bytes with its own permissions until
 someone changes or removes them. A run is isolated from crashes and loops, and
 it is not sandboxed — so the question worth your attention is not what a script
 does but whether you meant to accept it. The other tools reach nothing but this
-machine's own store and the scripts you already accepted.
+machine's own store, the messages its sessions send each other, and the scripts
+you already accepted.
 
 **Set `schedules` to ask as well.** A schedule runs an accepted script's action
 unattended, for up to 90 days, so adding one is the other decision worth your
@@ -102,6 +103,12 @@ attention: which action, how often, and for how long. `references` runs
 scripts too — reading a reference with nothing cached, or refreshing one, runs
 its script's URL action, and `watch` keeps that running for up to 12 hours —
 so set it to ask if each of those should be your call.
+
+**Let `messages` run without asking.** It carries what your sessions say to
+each other on a thread, held in the node's memory and gone at a restart, and
+nothing it does leaves this machine or runs anything. A prompt on every check
+would make you the courier between sessions again — the job the tool exists to
+take off you.
 
 The operator's verbs run on the machine itself, and are the door for anything
 that should not travel through a model's context:

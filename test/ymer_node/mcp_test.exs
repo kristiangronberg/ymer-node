@@ -99,7 +99,15 @@ defmodule YmerNode.McpTest do
       # under that reserved name, so it is part of the surface a client meets
       # and belongs in an exact-list assertion.
       assert Enum.sort(names) ==
-               ["help", "notebook", "references", "schedules", "script_author", "scripts"]
+               [
+                 "help",
+                 "messages",
+                 "notebook",
+                 "references",
+                 "schedules",
+                 "script_author",
+                 "scripts"
+               ]
     end
 
     @tag doc: """
@@ -116,6 +124,7 @@ defmodule YmerNode.McpTest do
       assert instructions =~ "scripts"
       assert instructions =~ "script_author"
       assert instructions =~ "schedules"
+      assert instructions =~ "messages"
     end
 
     @tag doc: """

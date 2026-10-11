@@ -36,6 +36,9 @@ defmodule YmerNode do
   (`YmerNode.Script.Context.files_dir/1`) sits outside the rule altogether: the
   node creates it and never touches its contents on its own, so the files there
   are the user's — neither precious to the node nor rebuildable by it.
+  Messages sit outside the rule from the other side: the node holds them in
+  memory and never stores them, so a restart loses them, by design
+  (`YmerNode.Messages`).
 
   ```mermaid
   flowchart LR
@@ -45,6 +48,7 @@ defmodule YmerNode do
       References[References]
       Scripts[Scripts]
       Schedules[Schedules]
+      Messages[Messages]
 
       NotebookDB[(notebook.db)]
       NodeDB[(node.db)]
@@ -75,6 +79,7 @@ defmodule YmerNode do
       Scripts -->|"the schedule holding a run in flight"| Schedules
       Schedules --> NodeDB
       Schedules -->|"a watch's firing refreshes an entry"| References
+      Mcp -->|"serves the messages tool"| Messages
       Backup -->|"VACUUM INTO"| NotebookDB
       Backup --> BackupFiles
   ```
@@ -241,6 +246,20 @@ defmodule YmerNode do
   the durability rule. `YmerNode.Schedules.Scheduler` is the clock that fires
   them.
 
+  ## Messages
+
+  `YmerNode.Messages` is how sessions talk with each other through the node, so
+  the person running them stops carrying words from one to the next. A session
+  sends a message to a [*thread*](docs/glossary.md#thread), and whoever reads
+  that thread sees it.
+  Each session names itself with a [*handle*](docs/glossary.md#handle), and the
+  node keeps a [*read mark*](docs/glossary.md#read-mark) for each handle on each
+  thread, so a session carries nothing between its checks. The node interprets
+  neither key and validates neither: it never sees a session, only the strings
+  it is given.
+  The process holds everything in memory and nothing else; what it holds, and
+  the rules for what each call does to it, are `YmerNode.Messages.Threads`.
+
   ## The MCP surface
 
   `YmerNode.Mcp` is the mount: the node's entire external surface, and the one
@@ -248,9 +267,9 @@ defmodule YmerNode do
   a client is handed at connect — including the paragraph naming ymer as the other
   half of the product, which is the only way a client learns the node is not the
   whole story. `YmerNode.Mcp.Tools.Notebook`, `YmerNode.Mcp.Tools.References`,
-  `YmerNode.Mcp.Tools.Scripts`, `YmerNode.Mcp.Tools.ScriptAuthor` and
-  `YmerNode.Mcp.Tools.Schedules` are the tools themselves, each a thin boundary
-  over its own context;
+  `YmerNode.Mcp.Tools.Scripts`, `YmerNode.Mcp.Tools.ScriptAuthor`,
+  `YmerNode.Mcp.Tools.Schedules` and `YmerNode.Mcp.Tools.Messages` are the tools
+  themselves, each a thin boundary over its own context;
   `YmerNode.Mcp.Tools.Helpers` holds the handful of shaping functions their
   action layers share, and `YmerNode.Mcp.Tools.ScriptFormat` the rendering the
   two script tools share.
@@ -263,5 +282,8 @@ defmodule YmerNode do
   The one exception is bounded: `references` starts a watch — one reference's
   URL action, for twelve hours at most — and the watch is listed and removable
   through `schedules` like any other.
+  The `messages` tool stands apart the other way: it is the one a client may
+  run without asking, because it reaches nothing beyond the node's own memory
+  and changes nothing a script runs.
   """
 end

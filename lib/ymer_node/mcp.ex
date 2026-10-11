@@ -54,6 +54,7 @@ defmodule YmerNode.Mcp do
 
   use Wymcp.Router,
     tools: [
+      YmerNode.Mcp.Tools.Messages,
       YmerNode.Mcp.Tools.Notebook,
       YmerNode.Mcp.Tools.References,
       YmerNode.Mcp.Tools.Schedules,
