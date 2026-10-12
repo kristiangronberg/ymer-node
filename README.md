@@ -144,6 +144,24 @@ and the refusal, naming `TZ` and the value, is read with `docker compose logs`
 rather than through an operator's verb, each of which is a call into a serving
 node.
 
+`YMER_NODE_EXTRA_CA_CERTS` in the same `.env` names a PEM file of extra CA
+certificates — ones every request the node makes through Req, a script's and
+the browser service client's, trusts beside the image's Mozilla bundle, for a
+network whose proxy re-signs TLS (`YmerNode.ExtraCaCertificates`). Name the
+self-signed CA certificate the proxy's chains end at: an intermediate loads, but
+no connection verifies against it. Typst's own package downloads, for a document
+importing a `@preview` package, are not covered: Typst fetches with its own TLS
+client, which trusts only the CA certificates compiled into it. The path is
+read inside the container, so keep the file inside the mount:
+`data/extra-ca-certs.pem` beside the compose file is `/data/extra-ca-certs.pem`
+to the node. Setting or changing the variable is applied with
+`docker compose up -d`. The file itself is read once, at boot, so a changed file
+under an unchanged path is read again only after `docker compose restart` (or
+`docker compose up -d --force-recreate`); the boot log then names each
+certificate it added. A file the node cannot use — missing there, not PEM,
+holding a key or a damaged block — refuses boot like a bad `TZ`, and the
+refusal names the variable, the path and the fix.
+
 ### Store and backup layout
 
 Inside that directory the store is `data/db/notebook.db`, and each backup the

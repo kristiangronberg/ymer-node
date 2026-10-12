@@ -113,6 +113,18 @@ defmodule YmerNode.ApplicationTest do
     end
 
     @tag doc: """
+         The extra CA certificates join a CA cache every request made through
+         Mint reads, and that cache fills itself with the platform's CAs alone
+         at the first connection that finds it empty. A failure means a child
+         that can make a request — the scheduler's firings run scripts — could
+         start before the load, and a request made then trusts less than the
+         operator named.
+         """
+    test "the extra CA certificates load before every other child" do
+      assert position(YmerNode.ExtraCaCertificates) == 0
+    end
+
+    @tag doc: """
          The control for the order cases above: every position they compare has
          to resolve, or a renamed child would make `nil < nil` and the cases
          would pass while guarding nothing.
@@ -121,6 +133,7 @@ defmodule YmerNode.ApplicationTest do
       for name <- [
             :migrator,
             :listener,
+            YmerNode.ExtraCaCertificates,
             YmerNode.References.Cache.Reconcile,
             YmerNode.Scripts.Loader,
             YmerNode.Notebook.Repo,

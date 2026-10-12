@@ -20,6 +20,12 @@ defmodule YmerNode.Script.Context do
   default retry would spend most of it sleeping; and a receive timeout well
   inside the run's own. A script that wants retries asks for them.
 
+  A request trusts the platform's CA certificates and the extra ones an
+  operator names (`YmerNode.ExtraCaCertificates`) unless it carries a CA option
+  of its own. A script that passes one —
+  `connect_options: [transport_opts: [cacerts: ...]]`, or `cacertfile:` there
+  instead — trusts only what it names.
+
   ## Secrets
 
   `secret/2` resolves a name through `YmerNode.Secrets` — but only a name the
@@ -87,6 +93,11 @@ defmodule YmerNode.Script.Context do
   the way any application's font is, beside the four families inside the
   package's native library; a node running in a container sees what the
   container has, not what the host machine has.
+
+  A document importing a `@preview` package has Typst download it, unless
+  Typst's own package cache already holds it, and Typst makes that request
+  with its own TLS client: it trusts only the CA certificates compiled into
+  it, never the extra ones an operator names (`YmerNode.ExtraCaCertificates`).
 
   A script calling `Typst` itself goes around the policy, as one calling `Req`
   goes around the throttles: its root is the release's own directory and its

@@ -215,6 +215,11 @@ defmodule YmerNode do
   service stays outside the image, and a node without one still answers every
   call — with a refusal naming what to run.
 
+  `YmerNode.ExtraCaCertificates` is a boot step, the application's first child:
+  it reads the PEM file `YMER_NODE_EXTRA_CA_CERTS` names, loads its
+  certificates into the CA cache beside the platform's own, and refuses boot
+  on a file it cannot use.
+
   `YmerNode.Scripts.CLI` is the operator's door, run on the machine itself —
   where importing a file from a repository and setting a secret that must never
   pass through a model's context both belong.

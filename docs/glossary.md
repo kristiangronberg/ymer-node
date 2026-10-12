@@ -110,6 +110,13 @@ sticks.
 _Avoid_: sample, default script, built-in script (built-in is the reference
 sources' word), template, seed (for it)
 
+### extra CA certificates
+`YmerNode.ExtraCaCertificates`
+_Avoid_: root, root CA; CA bundle, trust store (for the extra CA certificates
+or the combined set — the platform's own Mozilla bundle keeps its word); custom
+CA; proxy certificate; `YMER_NODE_EXTRA_CA_CERTS` names the variable that sets
+it, never the fact
+
 ## F
 
 ### fetch recipe

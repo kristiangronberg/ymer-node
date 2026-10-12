@@ -17,6 +17,13 @@ defmodule YmerNode.Application do
   # which includes a references call, whose registry the migrator has to have
   # built.
   #
+  # The extra CA certificates load first, ahead of every other child: the CA
+  # cache they join is read by every request made through Mint, and fills
+  # itself with the platform's CAs alone at the first connection that finds it
+  # empty. The scheduler's firings can run a script — which may make a request
+  # — before the listener is up, so nothing later in this list may come first.
+  # `YmerNode.ExtraCaCertificates` does nothing when no file is named.
+  #
   # The process registry and the task supervisor belong to the runner — one
   # records which scripts have a run in flight, the other owns the run
   # processes — and the task supervisor is also what the compiler bounds every
@@ -62,6 +69,7 @@ defmodule YmerNode.Application do
   @doc false
   def children do
     [
+      YmerNode.ExtraCaCertificates,
       YmerNode.Repo,
       {Registry, keys: :duplicate, name: YmerNode.Scripts.Runs},
       {Task.Supervisor, name: YmerNode.Scripts.TaskSupervisor},

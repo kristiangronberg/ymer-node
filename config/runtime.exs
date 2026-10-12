@@ -181,6 +181,15 @@ if config_env() == :prod do
     end
   end
 
+  # The extra CA certificates' PEM file. Only the path is resolved here,
+  # expanded like FILES_PATH's; `YmerNode.ExtraCaCertificates` reads the file.
+  # Inside the prod guard for TZ's reason: a developer's shell exports CA
+  # variables, and a dev node or a test run must not pick one up. Unset or
+  # blank writes nothing, and the node loads nothing.
+  if extra_ca_certs = env.("YMER_NODE_EXTRA_CA_CERTS") do
+    config :ymer_node, YmerNode.ExtraCaCertificates, path: Path.expand(extra_ca_certs)
+  end
+
   # The bind marker: an empty file the node's own image writes at build. Its
   # presence — and nothing else — widens the bind to all interfaces, which a
   # container needs because a process bound to loopback inside one is unreachable

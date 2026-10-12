@@ -38,6 +38,10 @@ defmodule YmerNode.ReleaseConfigTest do
   # exports would otherwise answer every case's read.
   @browser_service_variables ~w(BROWSER_SERVICE_URL BROWSER_SERVICE_TOKEN BROWSER_SERVICE_TOKEN_FILE)
 
+  # Cleared before every case like TZ: a path the shell exports would otherwise
+  # answer every case's read.
+  @extra_ca_certs_variable "YMER_NODE_EXTRA_CA_CERTS"
+
   runtime_source = File.read!(@runtime_config)
   [_, marker] = Regex.run(~r/File\.exists\?\("([^"]+)"\)/, runtime_source)
   @marker marker
@@ -64,7 +68,8 @@ defmodule YmerNode.ReleaseConfigTest do
           @files_variable,
           @cache_variable,
           @retired_variable,
-          @time_zone_variable | @browser_service_variables ++ @integer_variables
+          @time_zone_variable,
+          @extra_ca_certs_variable | @browser_service_variables ++ @integer_variables
         ],
         &{&1, System.get_env(&1)}
       )
@@ -87,6 +92,7 @@ defmodule YmerNode.ReleaseConfigTest do
     Enum.each(@integer_variables, &System.delete_env/1)
     System.delete_env(@time_zone_variable)
     Enum.each(@browser_service_variables, &System.delete_env/1)
+    System.delete_env(@extra_ca_certs_variable)
     System.put_env(@databases_variable, Path.join(tmp, "db"))
     System.put_env(@files_variable, Path.join(tmp, "files"))
     System.put_env(@cache_variable, Path.join(tmp, "cache"))
@@ -121,6 +127,12 @@ defmodule YmerNode.ReleaseConfigTest do
     @runtime_config
     |> Config.Reader.read!(env: :prod)
     |> get_in([:ymer_node, YmerNode.Scripts.BrowserService])
+  end
+
+  defp release_extra_ca_certs(env \\ :prod) do
+    @runtime_config
+    |> Config.Reader.read!(env: env)
+    |> get_in([:ymer_node, YmerNode.ExtraCaCertificates, :path])
   end
 
   describe "the bind marker" do
@@ -396,6 +408,43 @@ defmodule YmerNode.ReleaseConfigTest do
                token: "the-token",
                token_file: "/app/data/browser-service-token"
              )
+    end
+  end
+
+  describe "the extra CA certificates" do
+    test "a set path lands under the loader, unread" do
+      System.put_env(@extra_ca_certs_variable, "/data/extra-ca-certs.pem")
+
+      assert release_extra_ca_certs() == "/data/extra-ca-certs.pem"
+    end
+
+    test "a padded path is trimmed, as every path the file reads is" do
+      System.put_env(@extra_ca_certs_variable, "  /data/extra-ca-certs.pem  ")
+
+      assert release_extra_ca_certs() == "/data/extra-ca-certs.pem"
+    end
+
+    test "a relative path is expanded against the release's own cwd" do
+      path = Path.join(System.tmp_dir!(), "extra-ca-certs.pem")
+      System.put_env(@extra_ca_certs_variable, Path.relative_to_cwd(path, force: true))
+
+      assert release_extra_ca_certs() == Path.expand(path)
+    end
+
+    test "outside prod a set path is never read, so a developer's shell reaches no node" do
+      System.put_env(@extra_ca_certs_variable, "/data/extra-ca-certs.pem")
+
+      assert release_extra_ca_certs(:dev) == nil
+      assert release_extra_ca_certs(:prod) == "/data/extra-ca-certs.pem"
+    end
+
+    test "unset or blank writes no path, so the node loads nothing" do
+      assert release_extra_ca_certs() == nil
+
+      for blank <- ["", "  "] do
+        System.put_env(@extra_ca_certs_variable, blank)
+        assert release_extra_ca_certs() == nil
+      end
     end
   end
 end

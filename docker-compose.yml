@@ -46,6 +46,19 @@ services:
       # name the node's zone database does not know refuses boot, and
       # `docker compose logs` shows TZ and the value.
       TZ: "${TZ:-}"
+      # Extra CA certificates: a PEM file whose certificates every request the
+      # node makes through Req — a script's, the browser service client's —
+      # trusts beside the image's Mozilla bundle, for a network whose proxy
+      # re-signs TLS; name the self-signed CA certificate its chains end at,
+      # since an intermediate loads but anchors no chain. Typst's own
+      # package downloads do not: Typst trusts only the CA certificates
+      # compiled into it. Set it in the install's .env, like TZ; read from the
+      # shell too, so one exported there reaches the node. The path is read
+      # inside the container, so keep the file under the /data mount, such as
+      # /data/extra-ca-certs.pem. Unset, the node trusts the image's CAs alone;
+      # a file the node cannot use refuses boot, and `docker compose logs` says
+      # why.
+      YMER_NODE_EXTRA_CA_CERTS: "${YMER_NODE_EXTRA_CA_CERTS:-}"
       # Where the node's scripts reach the browser service, when the node cannot
       # find it by itself: the image finds the host's service on macOS Docker, as
       # host.docker.internal:8013, with nothing set. Set it in the install's .env,
