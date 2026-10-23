@@ -12,15 +12,16 @@ defmodule YmerNode.Scripts.CLI do
 
   ## How it arrives
 
-  There is no escript and no separate binary. `rel/overlays/bin/ymer-node` is a
-  shell script the release carries, and every verb is one `bin/ymer_node rpc`
-  into the running node — so the CLI talks to the node that is *already serving*
-  rather than booting a second VM against the same database. Two VMs on one
-  SQLite file is the thing this arrangement exists to avoid.
+  There is no escript and no separate binary. The release that carries the node
+  provides the overlay, a shell script beside its own launcher, and every verb
+  is one `rpc` into the running node through that launcher — so the CLI talks to
+  the node that is *already serving* rather than booting a second VM against the
+  same database. Two VMs on one SQLite file is the thing this arrangement exists
+  to avoid.
 
-  The overlay is named `ymer-node` with a hyphen, and that is not cosmetic:
-  overlays are copied over the release **last**, so an overlay named
-  `ymer_node` would silently replace the release's own launcher.
+  The overlay needs a name of its own, never the release's: overlays are copied
+  over the release **last**, so an overlay named after the release would
+  silently replace the release's own launcher.
 
   ## The argv seam
 
@@ -33,13 +34,13 @@ defmodule YmerNode.Scripts.CLI do
   ## Where an imported file is read
 
   `scripts import` with no argument reads the file from **stdin** — the rpc'd
-  process inherits the caller's group leader, so `docker exec -i <container>
-  ymer-node scripts import < file` crosses the container boundary with no path
-  inside it. `scripts import <file>` reads a path on the node's own filesystem
-  instead, which is where the shipped example lives; a host path given there is
-  refused with status 2, because the node cannot see it.
+  process inherits the caller's group leader, so `scripts import < file` hands
+  the node the file's bytes with no path the node has to see.
+  `scripts import <file>` reads a path on the node's own filesystem instead,
+  which is where the shipped example lives; a path that names no file there is
+  refused with status 2.
 
-  Nothing on stdin — `docker exec` without `-i` — is a usage error, status 2,
+  Nothing on stdin is a usage error, status 2,
   for `import` and for `secrets set` alike. What arrives then is an empty string,
   which would otherwise be compiled as an empty script and refused with a
   diagnostic about code that never came, or stored as an empty secret that a
@@ -62,9 +63,9 @@ defmodule YmerNode.Scripts.CLI do
   code the node holds and nothing else — not even the newline every other
   answer ends with — so `> file` holds exactly those bytes and a
   `scripts import` of that file on another node lands the same hash. Its
-  refusal is a line like any other. The release pins the logger level at
-  `:info` (`config/prod.exs`) so no query log rides that stdout: unpinned, a
-  release logs at `:debug`, and Ecto's query lines then print into the
+  refusal is a line like any other. The release carrying the node must pin the
+  logger level at `:info` or above so no query log rides that stdout: unpinned,
+  a release logs at `:debug`, and Ecto's query lines then print into the
   operator's terminal beside the answer — an import's INSERT carrying the
   whole script.
 
@@ -355,13 +356,12 @@ defmodule YmerNode.Scripts.CLI do
   end
 
   # Empty stdin is a usage error and never a value (moduledoc § Where an
-  # imported file is read): the one operator slip that produces it is
-  # `docker exec` without `-i`, so the message names that.
+  # imported file is read): the slip that produces it is a caller that left
+  # stdin unconnected, so the message says to pipe the bytes in.
   defp from_stdin(stdin, what, verb) do
     case stdin.() do
       "" ->
-        {"Nothing arrived on stdin for #{what}. Pipe it in — `docker exec -i`, not `docker exec`.",
-         2}
+        {"Nothing arrived on stdin for #{what}. Pipe it in, as in `< file`.", 2}
 
       value ->
         verb.(value)

@@ -107,7 +107,7 @@ defmodule YmerNode.RepoTest do
          this project and reaches dev and test only through `mix_audit` and
          `credo`, so a green suite says nothing about the release. A failure
          means the pin was dropped or moved to a library outside Elixir's own
-         standard library, and the first `references add` in a container raises
+         standard library, and the first `references add` in a release raises
          `Ecto.ChangeError` on the tags dump.
          """
     test "encodes array columns through Elixir's own JSON module" do

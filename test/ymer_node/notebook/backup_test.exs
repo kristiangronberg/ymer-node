@@ -310,7 +310,7 @@ defmodule YmerNode.Notebook.BackupTest do
          rename moves one file and the store's directory gains no orphans. A
          failure here means the check moved onto the source member — which would
          mutate a backup on disk — or the handle stopped being closed, and either
-         way the install grows files nothing owns.
+         way the store's directory grows files nothing owns.
          """
     test "leaves no artefacts beside the store or the source", %{tmp: tmp} do
       src = real_member(tmp, @id)

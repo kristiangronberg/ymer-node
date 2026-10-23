@@ -1,8 +1,8 @@
 import Config
 
 # The notebook DB lives at the project root and is gitignored (*.db). WAL plus a
-# generous busy_timeout mirror the container defaults, so dev behaves like a
-# running node. The sqlite-vec extension is loaded by the repo's own init/2.
+# generous busy_timeout, so dev behaves like a running node. The sqlite-vec
+# extension is loaded by the repo's own init/2.
 config :ymer_node, YmerNode.Notebook.Repo,
   database: Path.expand("../ymer_node_notebook_dev.db", __DIR__),
   journal_mode: :wal,

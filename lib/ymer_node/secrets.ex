@@ -13,8 +13,8 @@ defmodule YmerNode.Secrets do
   stays the one thing worth keeping, and a lost `secrets.env` costs a re-set
   rather than a restore.
 
-  It is also hand-editable, in the dotenv shape an install's `.env` already
-  uses, which is what an operator reaches for when no CLI is to hand.
+  It is also hand-editable, in the familiar dotenv shape, which is what an
+  operator reaches for when no CLI is to hand.
 
   ## Read at every resolution
 
@@ -42,7 +42,7 @@ defmodule YmerNode.Secrets do
   ## Every write is a rename
 
   `set/2` and `unset/1` rewrite the whole file, so a write interrupted part-way
-  — a kill, a stop signal during a deploy, a full disk — would take every other
+  — a kill, a stop signal during a restart, a full disk — would take every other
   secret with it and not only the one being changed. A neighbouring temp file
   is created empty, chmodded `0600`, written, and then renamed over the target:
   a rename within one directory is atomic, so a reader sees the old file or the
@@ -63,12 +63,11 @@ defmodule YmerNode.Secrets do
   Absolute path of the secrets file (`config :ymer_node, YmerNode.Secrets,
   :path`).
 
-  Refused by name, never defaulted: the release sets it — `config/prod.exs`
-  carries `/data/secrets.env`, `config/runtime.exs` overrides it from
-  `SECRETS_PATH` — and dev and test point at the checkout root, so a node that
-  cannot say where its secrets live fails loudly rather than inventing a path
-  and writing a file there. A VM that runs script code outside the node has
-  none of those environments, and points the key with
+  Refused by name, never defaulted: the configuration that runs the node sets
+  it, and dev and test point at the checkout root, so a node that cannot say
+  where its secrets live fails loudly rather than inventing a path and writing
+  a file there. A VM that runs script code outside the node has no such
+  configuration, and points the key with
   `YmerNode.Script.Harness.put_secrets_path/1`.
   """
   def path do
@@ -82,7 +81,7 @@ defmodule YmerNode.Secrets do
       :error ->
         raise ArgumentError,
               "no secrets file is configured: `config :ymer_node, YmerNode.Secrets, path:` " <>
-                "is unset — the release sets it and SECRETS_PATH moves it, dev and test " <>
+                "is unset — the configuration that runs the node sets it, dev and test " <>
                 "each name their own, and a VM running scripts outside the node points it " <>
                 "with YmerNode.Script.Harness.put_secrets_path/1"
     end

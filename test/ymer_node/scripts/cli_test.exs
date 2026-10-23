@@ -7,11 +7,12 @@ defmodule YmerNode.Scripts.CLITest do
   decides for itself, which answer is bytes and which a line, is pinned in the
   export cases through `capture_io`.
 
-  What this file cannot reach is the overlay: that `rel/overlays/bin/ymer-node`
-  packs argv the way `unpack/1` expects, and that `exit({:shutdown, n})`
-  surfaces as a shell exit status. Both are covered by the documented container
-  smoke in the plan, and the packing half is pinned here from the Elixir side —
-  a case builds the exact string the shell produces and unpacks it.
+  What this file cannot reach is the overlay: that the overlay the release
+  provides packs argv the way `unpack/1` expects, and that
+  `exit({:shutdown, n})` surfaces as a shell exit status. Both belong to the
+  release that carries the overlay; the packing half is pinned here from the
+  Elixir side — a case builds the exact string the shell produces and unpacks
+  it.
 
   Not async: it writes script rows and points `YmerNode.Secrets` at a file.
   """
@@ -178,21 +179,6 @@ defmodule YmerNode.Scripts.CLITest do
       assert exported == code(segment)
       assert String.ends_with?(listed, "\n")
     end
-
-    @tag doc: """
-         The other half of "bytes and nothing else": the release's logger level.
-         Unpinned, a release logs at `:debug` and Ecto's query lines print into
-         the operator's terminal beside the answer — an import's INSERT carrying
-         the whole script. Read off `config/prod.exs` the way `YmerNode.McpTest`
-         reads the bind, because this environment's config is never the
-         release's.
-         """
-    test "the release pins the logger level, so nothing rides the export's stdout" do
-      release_config =
-        Config.Reader.read!(Path.expand("../../../config/prod.exs", __DIR__), env: :prod)
-
-      assert release_config |> Keyword.fetch!(:logger) |> Keyword.fetch!(:level) == :info
-    end
   end
 
   describe "scripts browser" do
@@ -243,9 +229,8 @@ defmodule YmerNode.Scripts.CLITest do
 
   describe "scripts import" do
     @tag doc: """
-         The file's bytes arrive on stdin, so
-         `docker exec -i <c> ymer-node scripts import < file` needs no path
-         inside the container. The path form below is the other door — a path
+         The file's bytes arrive on stdin, so `scripts import < file` needs no
+         path the node can see. The path form below is the other door — a path
          on the node's own filesystem, which is where the shipped example lives.
          """
     test "reads the code from stdin when no file is given" do
@@ -259,15 +244,16 @@ defmodule YmerNode.Scripts.CLITest do
     end
 
     @tag doc: """
-         `docker exec` without `-i` closes stdin, and what arrives is an empty
-         string. Compiled, that is refused with a diagnostic about code the
-         node never received, sending the operator to edit a file that is
-         fine; the usage error names the slip instead.
+         A caller that leaves stdin unconnected hands the verb an empty string.
+         Compiled, that is refused with a diagnostic about code the node never
+         received, sending the operator to edit a file that is fine; the usage
+         error says to pipe the bytes in instead.
          """
-    test "refuses an import with nothing on stdin, naming the -i" do
+    test "refuses an import with nothing on stdin, saying to pipe it in" do
       assert {output, 2} = CLI.run(["scripts", "import"], fn -> "" end)
       assert output =~ "Nothing arrived on stdin"
-      assert output =~ "docker exec -i"
+      assert output =~ "Pipe it in, as in `< file`."
+      refute output =~ "docker"
       assert Scripts.list() == []
     end
 

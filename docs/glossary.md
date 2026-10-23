@@ -30,14 +30,6 @@ vendors it — in two shapes: what the context hands a run,
 _Avoid_: SDK, runtime, helper, stdlib (for it); *context* stays the word for
 the struct itself and never becomes a term of its own
 
-### bind marker
-
-The empty file the node's image writes at build, at a fixed path the release
-checks at boot; its presence is what makes the release bind all interfaces
-inside the container, and nothing else does.
-
-_Avoid_: bind flag, wide-bind switch, bind env (there is no variable)
-
 ### browser call
 `YmerNode.Script.Context.playwright/3`
 _Avoid_: run (the Runner's word), session, execution
@@ -67,12 +59,11 @@ _Avoid_: cache folder, references folder, files directory (for it)
 _Avoid_: entry (bare, for a reference), cached copy, snapshot
 
 ### CLI
-The release's operator verbs — `bin/ymer-node`, the overlay beside the release's
-own launcher — run by a human on the machine the node runs on; the node's own
-human door, beside the client's approval. Implemented by
-`YmerNode.Scripts.CLI`.
-_Avoid_: shell (the distribution's menubar app), console, command line (as the
-term)
+The node's operator verbs, `YmerNode.Scripts.CLI.main/1`, reached through an
+rpc overlay that the release carrying `ymer_node` provides — run by a human on
+the machine the node runs on; the node's own human door, beside the client's
+approval.
+_Avoid_: console, command line (as the term)
 
 ## D
 
@@ -88,10 +79,6 @@ A *source declaration* is what references derive from an accepted script's
 declaration.
 _Avoid_: manifest, capabilities, permissions, config
 
-### deploy
-`Mix.Tasks.YmerNode.Deploy`
-_Avoid_: upgrade, redeploy
-
 ### durability rule
 Defined in `YmerNode` — the app map's opening paragraph on what the node
 keeps.
@@ -102,7 +89,7 @@ rule
 
 ### example script
 
-A script the image ships and a fresh install holds — `Script.Hex` and
+A script the package ships and a fresh node holds — `Script.Hex` and
 `Script.Webpage` — each planted once, by a migration of its own, on a fresh
 node database; present to be read as much as run; removable, and removal
 sticks.
@@ -114,8 +101,7 @@ sources' word), template, seed (for it)
 `YmerNode.ExtraCaCertificates`
 _Avoid_: root, root CA; CA bundle, trust store (for the extra CA certificates
 or the combined set — the platform's own Mozilla bundle keeps its word); custom
-CA; proxy certificate; `YMER_NODE_EXTRA_CA_CERTS` names the variable that sets
-it, never the fact
+CA; proxy certificate
 
 ## F
 
@@ -128,8 +114,7 @@ _Avoid_: resolver, resolve, handler, fetcher
 _Avoid_: folder, files folder (the human word, never the term); node
 files (the node's own things take that head — these files are the
 user's); inbox, outbox, drop folder, gateway, share, exchange
-directory; mount, volume (for it — the mount is `/data`, which holds
-it); `FILES_PATH` names the variable that sets it, never the directory
+directory; mount, volume (for it)
 
 ### firing
 The moment a schedule comes due in the node time zone; it starts a run, or is
@@ -167,16 +152,6 @@ _Avoid_: push (the verb before the rename — the CLI accepts it as a
 synonym only), load (the loader's word for compiling a script into the
 VM), upload, install (for a script)
 
-### install
-
-The kept copy of the node on a machine: the directory holding its store, its
-`secrets.env` and the compose file, and the container compose runs from there.
-Stopped or removed, the container leaves the install in place; the checkout's
-smoke on its own port is not one — nothing there is kept.
-
-_Avoid_: install dir (as a term of its own — the install's directory is the
-install), the directory you keep, runner compose, prod (as a noun for it)
-
 ### interactive window
 A headed Chromium the browser service opens on a storage state for a person,
 which owns that state's name while open and writes it back on a timer and on
@@ -192,7 +167,7 @@ Read by `YmerNode.Schedules.Lifetime`.
 _Avoid_: deadline (the one-run bound), expiry, TTL, duration (for it)
 
 ### live output
-`Mix.Tasks.YmerNode.Build.LiveOutput`
+`YmerNodeDev.LiveOutput`
 _Avoid_: streamed output, streaming output, progress output, console
 output, relay, sink, echo
 
@@ -211,7 +186,8 @@ _Avoid_: store, mailbox, inbox (for what holds messages); post, note
 
 ### node
 
-A running Ymer Node install.
+A running Ymer Node: the application started from a release that carries
+`ymer_node`.
 
 Four other compounds stay qualified wherever they are meant: a **BEAM node**, a
 **Mermaid node** and an **AST node**, which are three other senses of the word,
@@ -235,8 +211,7 @@ _Avoid_: cache, node store, second store, node db
 `YmerNode.Script.Context.time_zone/1`
 _Avoid_: timezone, time-zone; local zone, operator's zone, machine
 zone, this node's zone (as terms — prose says "the node's time zone");
-`TZ` names the variable that sets it, never the fact; local time (a
-wall-clock reading, not a zone)
+local time (a wall-clock reading, not a zone)
 
 ### notebook
 `YmerNode.Notebook`
@@ -278,8 +253,7 @@ _Avoid_: cursor (`read`'s `next_cursor`), offset, seen flag, bookmark
 ### reference
 `YmerNode.References.Reference`
 _Avoid_: entry, bookmark, link; pointer (as the entity name — "pointer" stays
-the informal concept word in membrane prose); *image reference* stays
-compound-qualified for the Docker sense in `Mix.Tasks.YmerNode.Deploy`
+the informal concept word in membrane prose)
 
 ### reference validator
 Defined in `YmerNode.Script` — the moduledoc section on a URL action and the
@@ -298,16 +272,6 @@ tool serves. Until registry sync lands, this registry is the only copy of them.
 _Avoid_: index, knowledge index, catalog, reference layer. A **process
 registry** — Elixir's `Registry`, or the name a supervised process is
 registered under — stays compound-qualified wherever it is meant.
-
-### revision
-
-The git commit a build was made from, as its short sha, marked when the tree
-was dirty. An image built from a git checkout carries it three ways: as the
-OCI revision label, as the `ymer-node:<revision>` tag, and inside
-`serverInfo.version` as `<version>+<revision>`. A build that could name none —
-no git, or no work tree — carries it nowhere and answers the bare version.
-
-_Avoid_: stamp, sha stamp, build id
 
 ### run
 `YmerNode.Scripts.Runner`
@@ -383,16 +347,11 @@ single-file copy of it; a restore replaces it whole. Not the node database,
 which sits beside it and is rebuildable.
 
 _Avoid_: database file, db file, notebook file, the sqlite, the data (for
-the file — `data/` is the install's directory, which holds the store).
+the file).
 Never *store* as the verb for landing a script: a script is created,
 updated or imported, and the node *holds* it.
 
 ## T
-
-### tag invariant
-Defined in `Mix.Tasks.YmerNode.Build` — the `@moduledoc` section on what moves
-`ymer-node:latest`.
-_Avoid_: latest invariant, tag rule
 
 ### thread
 The opaque key a message is posted to and read by, which the node compares and
@@ -436,7 +395,7 @@ note
 
 ### Ymer Node
 
-The open-source, Docker-shipped, headless local companion to ymer: an MCP node
+The open-source, headless local companion to ymer: an MCP node
 providing local capability — the notebook, the references registry and the
 scripts it accepts — to LLM workers whose coordination lives in ymer. One product
 together with ymer, and no UI of its own.

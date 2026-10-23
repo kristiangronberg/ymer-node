@@ -168,8 +168,8 @@ defmodule YmerNode do
   two are equal. Code that changed after it was accepted is code nobody accepted.
   Three doors accept today — an MCP client through `script_author`, a human
   through the CLI, and the build, whose example scripts migrations plant on a
-  fresh node database at exactly the bytes the image carries, because whoever
-  built the image read them — and each is a deliberate act by someone who can
+  fresh node database at exactly the bytes `priv/scripts` holds, which the
+  package's author wrote and read — and each is a deliberate act by someone who can
   read what they are landing. A fourth, registry sync, is why the unaccepted
   state exists at all before any door can produce it.
 
@@ -212,11 +212,11 @@ defmodule YmerNode do
   there, how long a call may wait and how a failure reads, and nothing of the
   browser itself: the Chromium builds alone are hundreds of megabytes that most
   nodes never use, and Playwright's releases would become the node's. So the
-  service stays outside the image, and a node without one still answers every
+  service stays outside the node, and a node without one still answers every
   call — with a refusal naming what to run.
 
   `YmerNode.ExtraCaCertificates` is a boot step, the application's first child:
-  it reads the PEM file `YMER_NODE_EXTRA_CA_CERTS` names, loads its
+  it reads the PEM file its configuration names, loads its
   certificates into the CA cache beside the platform's own, and refuses boot
   on a file it cannot use.
 

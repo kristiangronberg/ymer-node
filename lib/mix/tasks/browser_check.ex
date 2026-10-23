@@ -32,7 +32,7 @@ if Mix.env() in [:dev, :test] do
     """
     use Mix.Task
 
-    alias Mix.Tasks.YmerNode.Build
+    alias YmerNodeDev.LiveOutput
 
     @shortdoc "Run the browser service's own tests"
 
@@ -76,7 +76,7 @@ if Mix.env() in [:dev, :test] do
         System.cmd(npm, args,
           cd: directory,
           stderr_to_stdout: true,
-          into: Build.live_output(:stdio)
+          into: %LiveOutput{device: :stdio}
         )
 
       if status != 0,

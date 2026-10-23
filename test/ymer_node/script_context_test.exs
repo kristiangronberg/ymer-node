@@ -16,7 +16,7 @@ defmodule YmerNode.ScriptContextTest do
   The zone cases set VM-global config too — `time_zone` under
   `YmerNode.Script.Context`: the configured case merges it into the keyword
   list `config/test.exs` keeps there, and the default case removes that key
-  whole for its duration, the state a node booted without `TZ` is in. Both
+  whole for its duration, the state of a node with no time zone configured. Both
   put the list back on exit, because the `Req.Test` plug every request case
   relies on lives in it. The files directory cases take the same shape over
   `files_dir`, and the absent-key case deletes that one key rather than the
@@ -212,9 +212,9 @@ defmodule YmerNode.ScriptContextTest do
     end
 
     @tag doc: """
-         The node's own environments set the key — `config/runtime.exs` from
-         `FILES_PATH`, `config/dev.exs` and `config/test.exs` with a directory of
-         their own — and a VM running scripts outside the node points it with
+         The configuration that runs the node sets the key, `config/dev.exs`
+         and `config/test.exs` with a directory of their own, and a VM running
+         scripts outside the node points it with
          `YmerNode.Script.Harness.put_files_dir/1`. So an absent key is a
          configuration defect, and the reader refuses it by name rather than
          inventing a default a script would then write into. A failure means a
@@ -227,7 +227,7 @@ defmodule YmerNode.ScriptContextTest do
       error = assert_raise ArgumentError, fn -> Context.files_dir(context()) end
 
       assert error.message =~ "files_dir"
-      assert error.message =~ "FILES_PATH"
+      assert error.message =~ "the configuration that runs the node sets it"
     end
   end
 

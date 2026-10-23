@@ -54,7 +54,7 @@ defmodule YmerNode.Repo.Migrations.AddWatchesToSchedulesTest do
   describe "up/0" do
     @tag doc: """
          The rebuild copies rows through a column list written by hand. A
-         failure means an existing install loses a schedule, or one of its
+         failure means an existing node loses a schedule, or one of its
          last-run fields, or an index the name rule reads, at the upgrade.
          """
     test "keeps every column of an existing schedule, and makes the three indexes" do

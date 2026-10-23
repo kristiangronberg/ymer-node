@@ -14,7 +14,7 @@ config :ymer_node, ecto_repos: [YmerNode.Repo]
 # the adapter's default, Jason, is no dependency of this project — it reaches
 # dev and test only through mix_audit and credo — so a release built without it
 # fails every insert of a tags value while the whole suite stays green
-# (measured 2026-09-09, on the first deploy after the references registry).
+# (measured 2026-09-09, on the first release built after the references registry).
 config :ecto_sqlite3, json_library: JSON
 
 # The one line that makes zones work in every script. Elixir's own database
@@ -53,4 +53,10 @@ config :logger, :default_formatter,
     :crash_reason
   ]
 
-import_config "#{config_env()}.exs"
+# Only dev and test have files of their own. The package ships no
+# configuration: the application that runs the node configures it, so a prod
+# compile here — the check that the dev tree stays out of `_build/prod` — reads
+# this file alone.
+if config_env() in [:dev, :test] do
+  import_config "#{config_env()}.exs"
+end

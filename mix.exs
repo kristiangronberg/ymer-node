@@ -4,13 +4,11 @@ defmodule YmerNode.MixProject do
   def project do
     [
       app: :ymer_node,
-      version: "0.7.0",
+      version: "0.7.1",
       elixir: "~> 1.19",
       elixirc_paths: elixirc_paths(Mix.env()),
-      start_permanent: Mix.env() == :prod,
       aliases: aliases(),
       deps: deps(),
-      releases: releases(),
       description:
         "Headless local MCP node providing notebook, references and script capability " <>
           "to LLM workers",
@@ -61,7 +59,10 @@ defmodule YmerNode.MixProject do
       main: "readme",
       source_url: @source_url,
       extras: [{"README.md", title: "README"}, "docs/glossary.md", "docs/scripts.md"],
-      groups_for_modules: [Scripts: ~r/^YmerNode\.Scripts?(\.|$)/]
+      groups_for_modules: [
+        Scripts: ~r/^YmerNode\.Scripts?(\.|$)/,
+        Development: ~r/^YmerNodeDev(\.|$)/
+      ]
     ]
   end
 
@@ -83,7 +84,7 @@ defmodule YmerNode.MixProject do
       # Markdown a script turns into what a system accepts — HTML, or a tree a
       # renderer walks into a wiki's markup. A NIF: the build downloads its
       # precompiled artifact for the building machine's target, so no Rust
-      # toolchain reaches the image.
+      # toolchain is needed to build it.
       {:mdex, "~> 0.13.5"},
       {:mix_audit, "~> 2.1", only: [:dev, :test], runtime: false},
       {:mix_test_watch, "~> 1.0", only: :dev, runtime: false},
@@ -114,23 +115,10 @@ defmodule YmerNode.MixProject do
       # a change that touches this file may take a newer tz. Should a zone in use
       # change before tz catches up, vendor a pinned IANA version instead —
       # `mix tz.download <version>` into `config :tz, :data_dir`, with
-      # `:iana_version` — and move the Dockerfile's `COPY priv` above its
-      # `mix deps.compile`, which today runs first.
+      # `:iana_version`.
       {:tz, "~> 0.28.2"},
       {:wymcp, "~> 0.9.1"},
       {:xlsx_reader, "~> 0.8.12"}
-    ]
-  end
-
-  defp releases do
-    [
-      ymer_node: [
-        include_executables_for: [:unix],
-        # The `Docs` chunk is what `YmerNode.Scripts.Guide` renders the guide
-        # from at the call; a release strips it by default, and the guide then
-        # refuses rather than answering in part. Release-wide, like the strip.
-        strip_beams: [keep: ["Docs"]]
-      ]
     ]
   end
 

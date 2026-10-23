@@ -44,7 +44,7 @@ defmodule YmerNode.References.SourcesTest do
 
     @tag doc: """
          A port is no part of a claim — `URI.parse/1` yields the host alone — so
-         an install reaching a system on a non-default port still gets its
+         a node reaching a system on a non-default port still gets its
          recipe. A failure means the claim started comparing authorities rather
          than hosts, and every ported uri silently degraded to `web`.
          """

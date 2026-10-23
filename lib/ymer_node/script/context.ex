@@ -225,19 +225,19 @@ defmodule YmerNode.Script.Context do
   end
 
   @doc """
-  The node's time zone, as the IANA name of the zone this node runs in — read
-  from `TZ` when the container boots, `Etc/UTC` when it is unset — for a script
-  to name the zone it reports in without carrying one: a script synced between a
-  user's nodes is the same bytes on every node, and each node answers its own. A
-  script may still name any zone literally.
+  The node's time zone, as the IANA name of the zone this node runs in —
+  `Etc/UTC` when none is configured — for a script to name the zone it reports
+  in without carrying one: a script synced between a user's nodes is the same
+  bytes on every node, and each node answers its own. A script may still name
+  any zone literally.
 
-  Always a string, and always one every zone-aware `DateTime` function accepts,
-  so a script reporting in it writes
+  Always a string, so a script reporting in it writes
   `DateTime.shift_zone(instant, Context.time_zone(context))`. The value is
-  `config :ymer_node, YmerNode.Script.Context, :time_zone`: `config/runtime.exs`
-  writes it from `TZ` in the prod environment alone, refusing boot on a name the
-  release's zone database does not know, so a dev or test node answers
-  `Etc/UTC`.
+  `config :ymer_node, YmerNode.Script.Context, :time_zone`, which the
+  configuration that runs the node sets. The node reads the name as given and
+  does not check it, so that configuration should refuse a name the zone
+  database does not know rather than boot on it. Dev and test set none, so a
+  dev or test node answers `Etc/UTC`.
   """
   def time_zone(%__MODULE__{}), do: time_zone()
 
@@ -254,23 +254,24 @@ defmodule YmerNode.Script.Context do
 
   @doc """
   The files directory — the one directory on this machine a script reads files
-  from and writes files to, `<install>/data/files` on the host and the directory
-  `FILES_PATH` names in the container — created by the node at boot, never
-  backed up by it, and the user's own: what a person or their client drops there
-  a script reads with `File`, and what a script writes there a person opens. No
-  path sits in a script's text, so a script synced between a user's nodes is the
-  same bytes on every node, and each node answers its own.
+  from and writes files to — never backed up by the node, and the user's own:
+  what a person or their client drops there a script reads with `File`, and
+  what a script writes there a person opens. No path sits in a script's text,
+  so a script synced between a user's nodes is the same bytes on every node,
+  and each node answers its own.
 
-  Always an absolute path, as a string, so a script reading a file there writes
+  An absolute path, as a string, so a script reading a file there writes
   `File.read!(Path.join(Context.files_dir(context), "issues.xlsx"))`. `File`
   and `Path` are the whole of what a script needs: sub-directories are the
   script's to make (`File.mkdir_p!/1`) and the user's to arrange. The value is
-  `config :ymer_node, YmerNode.Script.Context, :files_dir` — `config/runtime.exs`
-  writes it from `FILES_PATH` in the prod environment, `config/dev.exs` and
-  `config/test.exs` name a directory of their own — and an absent key is a
-  configuration defect this refuses by name rather than a case to default. A VM
-  that runs script code outside the node has none of those environments, and
-  points the key with `YmerNode.Script.Harness.put_files_dir/1`.
+  `config :ymer_node, YmerNode.Script.Context, :files_dir`, returned as
+  configured: the configuration that runs the node must set it absolute and
+  create the directory, since a relative value would resolve against the VM's
+  working directory instead. `config/dev.exs` and `config/test.exs` name a
+  directory of their own, and an absent key is a configuration defect this
+  refuses by name rather than a case to default. A VM that runs script code
+  outside the node has no such configuration, and points the key with
+  `YmerNode.Script.Harness.put_files_dir/1`.
   """
   def files_dir(%__MODULE__{}) do
     :ymer_node
@@ -283,8 +284,8 @@ defmodule YmerNode.Script.Context do
       :error ->
         raise ArgumentError,
               "no files directory is configured: `config :ymer_node, " <>
-                "YmerNode.Script.Context, files_dir:` is unset — the release writes " <>
-                "it from FILES_PATH, dev and test each name their own, and a VM running " <>
+                "YmerNode.Script.Context, files_dir:` is unset — the configuration that " <>
+                "runs the node sets it, dev and test each name their own, and a VM running " <>
                 "scripts outside the node points it with " <>
                 "YmerNode.Script.Harness.put_files_dir/1"
     end

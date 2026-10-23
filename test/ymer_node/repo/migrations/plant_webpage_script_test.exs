@@ -67,7 +67,7 @@ defmodule YmerNode.Repo.Migrations.PlantWebpageScriptTest do
     @tag doc: """
          The migration reads the fallback refusal ahead of its raise clause, and
          the two have one shape. A failure that raises means the clauses were
-         reordered, and an install whose operator already runs a web fallback
+         reordered, and a node whose operator already runs a web fallback
          dies at every boot; one that plants means the fallback rule left the
          build's door.
          """

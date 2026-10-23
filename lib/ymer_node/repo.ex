@@ -11,10 +11,13 @@ defmodule YmerNode.Repo do
   anything the node stores beyond the store itself. Nothing here is backed up:
   `YmerNode.Notebook.Backup` captures `notebook.db` and only `notebook.db`.
 
-  The file sits beside the store in the one directory `DATABASES_PATH` names,
-  and follows the same `NODE_DB_JOURNAL_MODE` and `NODE_DB_BUSY_TIMEOUT` the
-  notebook repo does — those variables govern the node's databases, both of
-  them. It loads no sqlite-vec extension: nothing it holds is a vector.
+  The file sits beside the store. The configuration that runs the node sets it
+  under `config :ymer_node, YmerNode.Repo`: `:database`, the file's path, and
+  `:journal_mode` and `:busy_timeout` as it sets them for the notebook repo. Its
+  `:pool_size` must be at least 2: the `Ecto.Migrator` child runs the
+  migrations inside a `Task`, which needs a connection beside the one the
+  starting process holds, and at 1 the application never starts. It loads no
+  sqlite-vec extension: nothing it holds is a vector.
 
   Its first table is the registry `YmerNode.References` serves. Until registry
   sync lands, that registry is the only copy of every reference added on this

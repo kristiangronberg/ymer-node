@@ -11,30 +11,21 @@ defmodule YmerNode.Mcp do
   ## Loopback is the security model
 
   `/mcp` carries no authentication. The compensating control is that the node is
-  not reachable from the network — but *where* that pin lives differs between the
-  two ways the node runs, and conflating them is how the guarantee gets lost.
+  not reachable from the network: `ip/0` defaults to loopback, so the node binds
+  `127.0.0.1` and nothing off-box can reach it.
 
-  Run directly on a machine, the node pins it itself: `ip/0` defaults to loopback,
-  so it binds `127.0.0.1` and nothing off-box can reach it.
+  A node run in a container cannot keep that pin: a process bound to loopback
+  inside a container is unreachable through a published port, so whoever runs it
+  there widens the bind *within the container's own network namespace*, and the
+  pin moves to the **host publish**. That publish must then carry the
+  `127.0.0.1:` prefix itself — a `-p 8012:8012` **without** it publishes on every
+  interface and exposes an unauthenticated SQL surface to the LAN.
 
-  Run in the node's own container, it cannot: a process bound to loopback inside a
-  container is unreachable through a published port, so *that* image binds all
-  interfaces *within its own network namespace* — and the pin moves to the **host
-  publish**. Only this repo's image does: the release carries no wide bind of its
-  own, so the same release in someone else's image binds loopback and its
-  published port reaches nobody.
-  `docker-compose.yml` hardcodes the `127.0.0.1:` prefix for exactly this reason,
-  and that prefix is the whole guarantee: a hand-rolled `docker run -p 8012:8012`
-  **without** it publishes on every interface and exposes an unauthenticated SQL
-  surface to the LAN. Use the compose file, or carry the prefix yourself.
-
-  What widens the bind is the **bind marker**: an empty file the node's own image
-  writes at a fixed path outside the release directory, which `config/runtime.exs`
-  checks at boot. Its presence is the whole widening, only a build produces it, and
-  copying the release out of the image cannot carry it — so a release started bare
-  on a host binds loopback and exposes nothing to that host's networks. Widening
-  still costs a committed artifact, and the environment cannot forge one: there is
-  no variable that turns it on.
+  Widening the bind is a committed configuration, `config :ymer_node,
+  YmerNode.Mcp, :ip`, and nothing in `ymer_node` widens it: the node reads that
+  key from the application environment alone, and no variable of its own turns
+  it on. The configuration that runs the node must not fill the key from the
+  environment either, or a variable set at start would be enough to widen it.
 
   Widening either layer without adding authentication first is the mistake both
   paragraphs exist to prevent. **Scripts do not widen either layer, and they are
@@ -82,17 +73,14 @@ defmodule YmerNode.Mcp do
   end
 
   @doc """
-  The bind address. Defaults to loopback; the node's own image widens it to all
-  interfaces through the bind marker `config/runtime.exs` reads at boot, where a
-  container's published port needs it — see the module doc for why that does not
-  widen the node's reach.
+  The bind address (`config :ymer_node, YmerNode.Mcp, :ip`). Defaults to
+  loopback; a node run in a container is widened there, where a published port
+  needs it — see the module doc for why that does not widen the node's reach.
 
-  Deliberately not readable from the environment. Changing it is a security
-  decision, so it costs a committed artifact and a review, never a variable set
-  at `docker run` time. `YmerNode.McpTest` pins this default and pins that
-  `config/prod.exs` sets no bind address; `YmerNode.ReleaseConfigTest` evaluates
-  `config/runtime.exs` as a release boot would and pins that the widening stays
-  behind the marker.
+  Deliberately not read from the environment here, and the configuration that
+  runs the node must not fill it from one either. Changing it is a security
+  decision, so it costs a committed configuration and a review, never a variable
+  set when the node starts. `YmerNode.McpTest` pins this default.
   """
   def ip do
     :ymer_node

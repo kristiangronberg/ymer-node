@@ -13,7 +13,7 @@ defmodule YmerNode.Notebook.VecLoadCheck do
   aborts `Supervisor.start_link` and fails the boot.
 
   Refusing to boot is the right trade for a node whose vector layer is a headline
-  capability. An install that silently cannot do KNN search is worse than one that
+  capability. A node that silently cannot do KNN search is worse than one that
   says why it stopped — and what it says has to be true, because this is the last
   answer the node gives about a notebook it cannot use, and the one the operator
   reads after a not-serving answer sends them to the log. The one query here fails
@@ -65,7 +65,7 @@ defmodule YmerNode.Notebook.VecLoadCheck do
   end
 
   # Two different failures wear the same shape at this call, and the operator
-  # reads one line in the container log. A pool that could not provide a
+  # reads one line in the node's log. A pool that could not provide a
   # connection means the node never opened the store at all, so vec0 never got the
   # chance to answer — reporting that as a vec0 load failure sends the operator
   # hunting a vendored binary while their store sits unopenable.

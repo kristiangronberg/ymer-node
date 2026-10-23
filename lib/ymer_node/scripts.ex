@@ -364,12 +364,12 @@ defmodule YmerNode.Scripts do
   def import(code) when is_binary(code), do: write(code, :import)
 
   @doc """
-  Plants one example script the image ships — `file` is its basename under
+  Plants one example script the package ships — `file` is its basename under
   `priv/scripts`, `"hex.exs"` — as an accepted row: the build's door, origin
   `shipped`. A row of its name already here is answered untouched: an
   operator's own copy is never overwritten. Each example script has a
   migration of its own that calls this, because a recorded migration never
-  runs again and an install that already has one example gets the next only
+  runs again and a node that already has one example gets the next only
   through the next migration.
 
   The one write that compiles outside `YmerNode.Scripts.Loader`. It runs inside
@@ -387,10 +387,10 @@ defmodule YmerNode.Scripts do
   the web fallback and an accepted script already is — here, an operator's own
   script, written before this build arrived, which is a choice this build has no
   business overriding: the migration plants nothing, says so, and records
-  itself all the same, so that install never gets the example from a boot. Any
+  itself all the same, so that node never gets the example from a boot. Any
   other `{:error, {reason, detail}}` is a shipped file that does not
   compile as a script — a build's defect, which the suite compiling those bytes
-  exists to catch before any image carries them. An `{:error, changeset}` from
+  exists to catch before any release carries them. An `{:error, changeset}` from
   the row write is this codebase's own bug — the compiler produced every value
   the changeset checks — and the migration lets it crash the boot loudly rather
   than naming a next step nobody has.

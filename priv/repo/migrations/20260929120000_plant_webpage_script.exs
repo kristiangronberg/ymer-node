@@ -5,14 +5,14 @@ defmodule YmerNode.Repo.Migrations.PlantWebpageScript do
 
   require Logger
 
-  # The second example script the image ships, `webpage` — the web fallback —
+  # The second example script the package ships, `webpage` — the web fallback —
   # planted once as an accepted row of origin `shipped`, the way the migration
   # before it plants `hex`. A migration of its own because a recorded migration
-  # never runs again: an install that already holds `hex` gets `webpage` from
+  # never runs again: a node that already holds `hex` gets `webpage` from
   # this one and from nothing else. Its skip is its own too. An operator's
   # script that is already the web fallback keeps the part: the example is not
   # planted, the boot goes on, the log says why, and the record is written all
-  # the same, so that install never gets the example from a boot. What the row
+  # the same, so that node never gets the example from a boot. What the row
   # holds, and why its compile runs outside the loader, is
   # `YmerNode.Scripts.plant_example/1`'s.
   #

@@ -492,7 +492,7 @@ defmodule YmerNode.NotebookRecoveryTest do
     @tag doc: """
          The boot refusal is the last answer the node gives about a notebook it
          cannot use, and once the not-serving answer has sent the user to the
-         container log it is the line they read. Two different failures wear the
+         node's log it is the line they read. Two different failures wear the
          same shape at this call, and naming the wrong one sends the operator
          hunting a vendored binary while their store sits unopenable. The path is
          named deliberately: this message is an operator's surface — a boot log

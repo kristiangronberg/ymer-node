@@ -21,7 +21,8 @@ defmodule YmerNode.ExtraCaCertificatesTest do
 
   @moduletag :tmp_dir
 
-  @escape "Unset YMER_NODE_EXTRA_CA_CERTS to boot on the platform's CAs alone."
+  @escape "Remove `config :ymer_node, YmerNode.ExtraCaCertificates, :path` to boot on the " <>
+            "platform's CAs alone."
 
   @test_subject "emailAddress=root@example.org, CN=probe ca, L=Stockholm, C=SE, O=erlang, " <>
                   "OU=automated testing"
@@ -85,24 +86,24 @@ defmodule YmerNode.ExtraCaCertificatesTest do
     end
 
     @tag doc: """
-         The likeliest mistake is a host path in the install's `.env`: the
-         path is resolved inside the container, where it names nothing. A
-         failure means the refusal stopped saying where the path is read, and
-         the operator is left looking at a file that plainly exists on their
-         own machine.
+         The likeliest mistake is a path as one machine sees it, handed to a
+         node that runs elsewhere — in a container, say — where it names
+         nothing. A failure means the refusal stopped saying where the path is
+         read, and the operator is left looking at a file that plainly exists
+         on their own machine.
          """
     test "a path naming no file refuses, saying where the path is read", %{tmp_dir: tmp_dir} do
       message = refusal!(Path.join(tmp_dir, "absent.pem"))
 
-      assert message =~ "YMER_NODE_EXTRA_CA_CERTS names no file inside the node"
-      assert message =~ "keep the file under the /data mount, such as /data/extra-ca-certs.pem"
+      assert message =~ "`config :ymer_node, YmerNode.ExtraCaCertificates, :path` names no file:"
+      assert message =~ "The path is read where the node runs"
     end
 
     test "a path through a file refuses as naming no file", %{tmp_dir: tmp_dir} do
       file = write(tmp_dir, "plain", "")
 
       assert refusal!(Path.join(file, "extra.pem")) =~
-               "YMER_NODE_EXTRA_CA_CERTS names no file inside the node"
+               "`config :ymer_node, YmerNode.ExtraCaCertificates, :path` names no file:"
     end
 
     test "an unreadable file refuses, naming why", %{tmp_dir: tmp_dir} do
@@ -273,7 +274,7 @@ defmodule YmerNode.ExtraCaCertificatesTest do
       assert length(combined) == length(platform) + 1
 
       assert log =~
-               "extra CA certificates loaded from #{path} (YMER_NODE_EXTRA_CA_CERTS): 1 — " <>
+               "extra CA certificates loaded from #{path}: 1 — " <>
                  @test_subject
     end
 
@@ -283,7 +284,7 @@ defmodule YmerNode.ExtraCaCertificatesTest do
         :ok
       end
 
-      assert_raise ArgumentError, ~r/names no file inside the node/, fn ->
+      assert_raise ArgumentError, ~r/names no file:/, fn ->
         ExtraCaCertificates.install!(Path.join(tmp_dir, "absent.pem"), platform)
       end
 
@@ -306,7 +307,7 @@ defmodule YmerNode.ExtraCaCertificatesTest do
           ExtraCaCertificates.install!(path, fn -> {:error, :no_cacerts_found} end)
         end
 
-      assert error.message =~ "YMER_NODE_EXTRA_CA_CERTS is set to #{inspect(path)}"
+      assert error.message =~ "names #{inspect(path)}, but the platform's own CAs"
       assert error.message =~ "the platform's own CAs did not load (:no_cacerts_found)"
       assert String.ends_with?(error.message, @escape)
     end
@@ -346,8 +347,8 @@ defmodule YmerNode.ExtraCaCertificatesTest do
     @tag doc: """
          The child is where the configured path meets the load. A failure
          means the node boots without the certificates its operator named:
-         the child stopped reading the key `config/runtime.exs` writes, or
-         stopped loading the file it names.
+         the child stopped reading its configured key, or stopped loading the
+         file it names.
          """
     test "loads the file the config names, then steps aside", %{tmp_dir: tmp_dir} do
       der = certificate("probe ca")
@@ -374,7 +375,7 @@ defmodule YmerNode.ExtraCaCertificatesTest do
       path = Path.join(tmp_dir, "absent.pem")
       Application.put_env(:ymer_node, ExtraCaCertificates, path: path)
 
-      assert_raise ArgumentError, ~r/names no file inside the node/, fn ->
+      assert_raise ArgumentError, ~r/names no file:/, fn ->
         ExtraCaCertificates.init([])
       end
     end

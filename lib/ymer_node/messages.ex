@@ -9,7 +9,7 @@ defmodule YmerNode.Messages do
 
   This process holds every message and every read mark, in memory and nowhere
   else — `YmerNode.Messages.Threads` is the value it holds and the rules for
-  what each call does to it. Nothing persists: a restart, a deploy included,
+  what each call does to it. Nothing persists: a restart, an upgrade included,
   loses every message and every read mark. That is the design, not a gap. It is
   also why every answer that finds nothing says when messages started — the
   process's own start — so a session waiting on a reply after a restart reads a

@@ -1,6 +1,6 @@
 defmodule Script.WebpageTest do
   @moduledoc """
-  The web fallback the image ships, run against `Req.Test` rather than the
+  The web fallback the package ships, run against `Req.Test` rather than the
   network, and compiled from its file on disk — the bytes the build plants —
   as `Script.HexTest` compiles `hex.exs`, for the reason that file gives.
 

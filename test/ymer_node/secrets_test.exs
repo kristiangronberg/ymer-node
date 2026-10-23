@@ -55,7 +55,7 @@ defmodule YmerNode.SecretsTest do
       error = assert_raise ArgumentError, fn -> Secrets.path() end
 
       assert error.message =~ "path:"
-      assert error.message =~ "SECRETS_PATH"
+      assert error.message =~ "the configuration that runs the node sets it"
       assert error.message =~ "YmerNode.Script.Harness.put_secrets_path/1"
     end
   end

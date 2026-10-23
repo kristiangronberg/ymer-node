@@ -59,7 +59,7 @@ config :ymer_node, YmerNode.Notebook.Backup,
   retain: 40
 
 # The sandbox holds no checked-out connection at boot, so the probe would fail
-# against a perfectly healthy build. Dev and a running container assert it.
+# against a perfectly healthy build. Dev and a running node assert it.
 config :ymer_node, YmerNode.Notebook.VecLoadCheck, enabled: false
 
 # Port 0 binds an ephemeral port. The node's registered test port is 4013, but
@@ -89,8 +89,8 @@ config :ymer_node, YmerNode.Secrets,
 # times and cost the case six seconds.
 #
 # The files directory is partitioned like the backups directory. Nothing creates
-# it at boot in test — that mkdir is `config/runtime.exs`'s, prod only — so a
-# case that writes a file there makes the directory first.
+# it at boot in test — creating it is the configuration's job wherever a node
+# runs — so a case that writes a file there makes the directory first.
 config :ymer_node, YmerNode.Script.Context,
   request_options: [retry: false, plug: {Req.Test, YmerNode.Script.Context}],
   files_dir:

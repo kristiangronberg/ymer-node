@@ -43,12 +43,12 @@ if Mix.env() in [:dev, :test] do
     into the fixture's build, about twenty seconds on a first run.
 
     The module is wrapped in `if Mix.env() in [:dev, :test]`, like
-    `mix ymer_node.build`, so a consumer's build of the node — dependencies
-    compile under `:prod` — never contains it.
+    `mix ymer_node.browser_check`, so a consumer's build of the node —
+    dependencies compile under `:prod` — never contains it.
     """
     use Mix.Task
 
-    alias Mix.Tasks.YmerNode.Build
+    alias YmerNodeDev.LiveOutput
 
     @shortdoc "Test the script test support from a consumer project"
 
@@ -120,7 +120,7 @@ if Mix.env() in [:dev, :test] do
           cd: project,
           env: environment,
           stderr_to_stdout: true,
-          into: Build.live_output(:stdio)
+          into: %LiveOutput{device: :stdio}
         )
 
       if status != 0, do: Mix.raise("#{command} failed in #{project} (exit status #{status}).")

@@ -165,7 +165,7 @@ defmodule YmerNode.Scripts.BrowserServiceTest do
 
       assert error.message =~ "nothing answers at http://127.0.0.1:8013"
       assert error.message =~ "run `npm start` in browser-service/"
-      assert error.message =~ "BROWSER_SERVICE_URL"
+      assert error.message =~ "config :ymer_node, YmerNode.Scripts.BrowserService, :url"
     end
 
     test "answers timeout when the service does not answer before the deadline" do
@@ -186,8 +186,10 @@ defmodule YmerNode.Scripts.BrowserServiceTest do
           ] do
         Req.Test.stub(Context, answer)
 
-        assert {:error, %Error{kind: :protocol}} =
+        assert {:error, %Error{kind: :protocol, message: message}} =
                  BrowserService.call(deadline(), "async () => 1", [])
+
+        assert message =~ "config :ymer_node, YmerNode.Scripts.BrowserService, :url"
       end
     end
 
@@ -397,7 +399,7 @@ defmodule YmerNode.Scripts.BrowserServiceTest do
       assert message =~ "refused the request (status 401): " <> refusal
     end
 
-    test "a node configured with no token file — one inside its image — sends none" do
+    test "a node configured with no token file sends none" do
       Application.put_env(:ymer_node, BrowserService, token_file: nil)
 
       assert authorizations(fn -> BrowserService.status() end) == [[]]

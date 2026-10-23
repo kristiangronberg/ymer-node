@@ -90,7 +90,7 @@ defmodule YmerNode.Repo.Migrations.PlantExampleScriptTest do
     @tag doc: """
          The migration reads the host refusal ahead of its raise clause, and the
          two have one shape. A failure that raises means the clauses were
-         reordered, and an install whose operator already claims hex.pm dies at
+         reordered, and a node whose operator already claims hex.pm dies at
          every boot; one that plants means the host rule left the build's door.
          """
     test "plants nothing, and logs why, where an accepted script claims the example's host" do

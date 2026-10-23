@@ -10,8 +10,9 @@ defmodule YmerNode.Scripts.Guide do
   beneath them, and this module renders those bytes: a client reading the guide
   and a developer reading the published docs read the same text, and a contract
   change moves one text. `Code.fetch_docs/1` is the reader, which is why the
-  release keeps the BEAM `Docs` chunk that `mix release` strips by default —
-  `strip_beams: [keep: ["Docs"]]` in `mix.exs`, and the one reason it is there.
+  release carrying `ymer_node` must keep the BEAM `Docs` chunk that
+  `mix release` strips by default — `strip_beams: [keep: ["Docs"]]` in that
+  release's configuration.
 
   One section is the guide's own, and it comes last: *Applications this release
   carries*, read from the running node at the call. A release carries only the

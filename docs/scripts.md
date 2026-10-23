@@ -2,7 +2,7 @@
 
 A script is logic over what the node hands it. This page maps what a
 script author is likely to want onto where it comes from — the release, a
-library, a service, an image of your own — and states the test that
+library, a service, a release of your own — and states the test that
 decides when the node itself grows. The contract a script implements and
 the calls it may rely on across releases are documented once, at
 `YmerNode.Script` (*What a script may call*) and `YmerNode.Script.Context`;
@@ -46,11 +46,11 @@ by the first rung that fits.
    capability that exists as a service is reached the way any system is:
    a PDF renderer, a browser, an LLM or embedding API. No battery, and
    often the better operational shape.
-4. **An image of your own.** The node is open source and its Dockerfile is
-   the build. An organisation with a native need the stock node does not
-   carry builds its own image with the dependency added; the script
-   contract is unchanged. The promise in `YmerNode.Script` covers the
-   stock image only.
+4. **A release of your own.** The node is open source, and an application
+   that runs it builds its own release. An organisation with a native need
+   the node does not carry adds the dependency to its own release; the
+   script contract is unchanged. The promise in `YmerNode.Script` covers the
+   packages `ymer_node` itself depends on only.
 5. **A battery.** The node itself grows, through its roadmap, when a use
    case in hand needs something no library can be:
    - native code — a compiled extension the running node cannot build
@@ -93,7 +93,7 @@ agents — and where each lands here.
 | SSH, SFTP transfer | `:ssh` | one release line when a use case arrives |
 | PDF | typst | the release |
 | Web UI test automation | Playwright | a service: the browser service, reached through `YmerNode.Script.Context.playwright/3` — set up as the README's *The browser service* says |
-| Images, charts | vix, image | a service or an image of your own; SVG through `EEx` needs nothing |
+| Images, charts | vix, image | a service or a release of your own; SVG through `EEx` needs nothing |
 | Crypto, JWT, TOTP | `:crypto`, `:public_key`; jose | the release; TOTP is a library; JWT a battery when an assertion flow needs it |
 | Scheduling | a schedule, `YmerNode.Schedules` | a node feature, not a battery |
 | Storage, state, vectors | the notebook | the release |

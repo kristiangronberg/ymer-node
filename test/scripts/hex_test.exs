@@ -10,7 +10,7 @@ defmodule Script.HexTest do
 
   The script is compiled from its file on disk, through the same compiler an
   MCP `create` uses. That is deliberate: `priv/scripts/hex.exs` is what the
-  build plants on a fresh install, and what an operator can import by hand, so
+  build plants on a fresh node, and what an operator can import by hand, so
   what these cases must prove is that **the shipped bytes** satisfy the
   contract, not that some fixture resembling them does.
 

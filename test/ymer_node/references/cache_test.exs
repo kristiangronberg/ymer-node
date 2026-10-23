@@ -36,6 +36,26 @@ defmodule YmerNode.References.CacheTest do
     %{text: text, files: files}
   end
 
+  describe "dir/0" do
+    @tag doc: """
+         The configuration that runs the node sets the key, and `config/dev.exs`
+         and `config/test.exs` name a directory of their own, so an absent key is
+         a configuration defect the reader refuses by name. A failure means a
+         default came back, and a misconfigured node would write its cache
+         somewhere nobody arranged, or the message stopped saying who sets it.
+         """
+    test "refuses an absent key naming it, never a default" do
+      saved = Application.get_env(:ymer_node, Cache)
+      on_exit(fn -> Application.put_env(:ymer_node, Cache, saved) end)
+      Application.put_env(:ymer_node, Cache, Keyword.delete(saved, :dir))
+
+      error = assert_raise ArgumentError, fn -> Cache.dir() end
+
+      assert error.message =~ "YmerNode.References.Cache, dir:"
+      assert error.message =~ "the configuration that runs the node sets it"
+    end
+  end
+
   describe "read/3 — text" do
     test "fetches once on a miss, then serves the entry without running the script" do
       reference = reference!("https://text.example.test/page")
@@ -288,7 +308,7 @@ defmodule YmerNode.References.CacheTest do
 
     @tag doc: """
          The cache directory follows the node database, and a file can still
-         go on its own — by hand, or with a volume. A failure means a read of
+         go on its own — by hand, say. A failure means a read of
          that reference raises for as long as the entry stands.
          """
     test "an entry whose file is gone is a miss, fetched and written again" do

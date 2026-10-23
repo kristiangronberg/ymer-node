@@ -5,8 +5,8 @@ defmodule YmerNode.Repo.Migrations.PlantExampleScript do
 
   require Logger
 
-  # The example script the image ships is planted here, once, as an accepted
-  # row of origin `shipped` — so a fresh install holds it without an operator
+  # The example script the package ships is planted here, once, as an accepted
+  # row of origin `shipped` — so a fresh node holds it without an operator
   # importing it by hand. A migration rather than a check at every boot because
   # this table's own record is the memory: a recorded migration never runs
   # again, so removing the row sticks, an upgrade never re-plants it, and a
@@ -17,7 +17,7 @@ defmodule YmerNode.Repo.Migrations.PlantExampleScript do
   # why — the way the loader goes on past a row that will not compile, because
   # a boot that died over one script would take the notebook and the registry
   # with it, on every boot until someone found the row. The record is written
-  # either way, so that install never gets the example from a boot: an operator
+  # either way, so that node never gets the example from a boot: an operator
   # who frees the host and wants it imports the release's own copy by hand
   # (`priv/scripts/hex.exs` under the release's `lib/ymer_node-<version>/`).
   # What the row holds, and why its compile runs outside the loader, is

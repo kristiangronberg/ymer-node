@@ -4,11 +4,6 @@ defmodule YmerNode.McpTest do
   the server actually serves, not the source that produced them. No database and
   no listener: the mount freezes its options at compile time, so every assertion
   here is a pure read.
-
-  The release-config case is the one exception: it reads `config/prod.exs` with
-  `Config.Reader`, because a release's own defaults cannot be observed from an
-  application booted in any other environment. Still a pure read — one file, no
-  boot, no environment variables — so the module stays `async: true`.
   """
   use ExUnit.Case, async: true
 
@@ -45,31 +40,12 @@ defmodule YmerNode.McpTest do
          preference: `/mcp` is unauthenticated, so off-container the loopback bind
          is the only thing keeping an SQL surface off the LAN. A failure means the
          default moved, or a bind address was set across all environments — check
-         `config/config.exs` before touching this. Why the node's own image widens
-         it lives in `YmerNode.Mcp`'s "Loopback is the security model" section.
+         `config/config.exs` before touching this. Why a node run in a container
+         widens it lives in `YmerNode.Mcp`'s "Loopback is the security model"
+         section.
          """
     test "the bind address defaults to loopback" do
       assert YmerNode.Mcp.ip() == {127, 0, 0, 1}
-    end
-
-    @tag doc: """
-         Pins one of the two conditions a bare `bin/ymer_node start` needs to bind
-         loopback — that `config/prod.exs` carries no bind address — which no
-         assertion against the running application can reach, because this
-         environment's config is never the release's. A failure means the wide bind
-         moved back into compile-time release config. The other condition, that
-         `config/runtime.exs` widens only behind the bind marker, is
-         `YmerNode.ReleaseConfigTest`'s; see `docs/glossary.md`'s *bind marker*
-         entry for the term.
-         """
-    test "the release config carries no bind address of its own" do
-      release_config =
-        Config.Reader.read!(Path.expand("../../config/prod.exs", __DIR__), env: :prod)
-
-      mcp = release_config |> Keyword.fetch!(:ymer_node) |> Keyword.fetch!(YmerNode.Mcp)
-
-      assert Keyword.fetch!(mcp, :port) == 8012
-      refute Keyword.has_key?(mcp, :ip)
     end
 
     test "every tool description fits the 2KB client budget" do

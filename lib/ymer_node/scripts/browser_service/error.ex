@@ -37,7 +37,7 @@ defmodule YmerNode.Scripts.BrowserService.Error do
 
   @doc """
   Nothing answered at `url`: the refusal names the start command, where the
-  first-time setup lives, and the variable for a service that runs elsewhere.
+  first-time setup lives, and the setting for a service that runs elsewhere.
   """
   def unreachable(url) when is_binary(url) do
     %__MODULE__{
@@ -46,7 +46,8 @@ defmodule YmerNode.Scripts.BrowserService.Error do
         "nothing answers at #{url}. In a checkout of " <>
           "https://github.com/kristiangronberg/ymer-node, run `npm start` in " <>
           "browser-service/ — first-time setup is the README's \"The browser service\" " <>
-          "section — or point BROWSER_SERVICE_URL at a browser service that runs elsewhere",
+          "section — or point `config :ymer_node, YmerNode.Scripts.BrowserService, :url` " <>
+          "at a browser service that runs elsewhere",
       call_log: []
     }
   end
@@ -73,7 +74,8 @@ defmodule YmerNode.Scripts.BrowserService.Error do
       kind: :protocol,
       message:
         "#{url} answered, but not as the browser service (#{detail}): another program " <>
-          "may hold the port, and BROWSER_SERVICE_URL points the node at the service's own",
+          "may hold the port, and `config :ymer_node, YmerNode.Scripts.BrowserService, :url` " <>
+          "points the node at the service's own",
       call_log: []
     }
   end

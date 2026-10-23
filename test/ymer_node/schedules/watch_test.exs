@@ -16,6 +16,16 @@ defmodule YmerNode.Schedules.WatchTest do
   alias YmerNode.Scripts
   alias YmerNode.Scripts.Compiler
 
+  # A firing of a file-storing watch writes into the partition's cache
+  # directory, which `YmerNode.References.CacheTest` reads whole, so every case
+  # empties it on exit.
+  setup do
+    on_exit(fn ->
+      with {:ok, names} <- File.ls(Cache.dir()),
+           do: for(name <- names, do: File.rm(Path.join(Cache.dir(), name)))
+    end)
+  end
+
   describe "watch/3" do
     test "starts a watch named for the reference, at its cadence, for its lifetime" do
       reference = reference!("https://watch.example.test/page")

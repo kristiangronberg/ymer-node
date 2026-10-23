@@ -5,8 +5,8 @@ defmodule YmerNode.Scripts.BrowserService do
   which runs Playwright code a script sends it — each browser call in a fresh
   browser context — and keeps the storage states.
 
-  The browser, Playwright and Node.js stay out of the node, its image and its
-  release: a browser is hundreds of megabytes that most nodes never use, and
+  The browser, Playwright and Node.js stay out of the node and its release: a
+  browser is hundreds of megabytes that most nodes never use, and
   Playwright's own release cadence would become the node's. So the node owns
   four things and no more — where the service is, the token it sends there,
   how long a call may wait, and how a failure reads — and a script reaches the
@@ -14,34 +14,32 @@ defmodule YmerNode.Scripts.BrowserService do
 
   ## Where the service is
 
-  `url/0`. A release reads `BROWSER_SERVICE_URL`; without it, a node inside its
-  own image — where the bind marker is — reaches the host's loopback-bound
-  service at `http://host.docker.internal:8013`, and a node on the host at
-  `http://127.0.0.1:8013`. That default reaches on macOS Docker and on a host
-  node; on Linux Docker it does not, and the variable is the way there. A VM
-  that sets nothing — a script's own repository testing it under `runtime:
-  false` — answers the host default, and its calls meet the test's stub
-  rather than the network.
+  `url/0`: `config :ymer_node, YmerNode.Scripts.BrowserService, :url`, which a
+  node that reaches the service anywhere but the host default sets — a node in
+  a container, say. The default is `http://127.0.0.1:8013`, so a node on the
+  host needs nothing. A VM that sets nothing — a script's own repository
+  testing it under `runtime: false` — answers the host default, and its calls
+  meet the test's stub rather than the network.
 
   ## The token
 
   Every request carries the service's token as `Authorization: Bearer`, and
   the service refuses one without it: a browser call's code runs in the
   service's own process with the privileges of whoever started it, and a
-  loopback bind does not keep other programs out — every container on a Docker
-  host reaches the host through `host.docker.internal`, as the node's image
-  does. The token is the contents of a file only its owner can read,
+  loopback bind does not keep other programs out — a container on the same
+  machine reaches the host's loopback services through its runtime's host
+  gateway. The token is the contents of a file only its owner can read,
   `~/.ymer-node/browser-service-token` unless `BROWSER_SERVICE_TOKEN_FILE`
   moves it, for the service and any node on the host alike, and whichever of
   them needs it first writes it: the file `0600`, and any directory it makes
-  `0700`. A node inside its own image cannot read a file on the host, so a
-  release there reads no file and sends the value of `BROWSER_SERVICE_TOKEN`,
-  which wins wherever it is set. A node that cannot read the file sends no
-  token, and neither does one that finds the file readable by others — that
-  one logs a warning naming the `chmod` — and the service's refusal says where
-  the token is. A request a plug answers — a test's stub — reaches no service,
-  so the node never reads or writes the default file for one; a token or a
-  file the configuration names is still sent.
+  `0700`. A node that cannot read a file on the host — one in a container — is
+  configured with the value itself, `:token`, which wins wherever it is set, or
+  with a `:token_file` of `nil` to read no file. A node that cannot read the
+  file sends no token, and neither does one that finds the file readable by
+  others — that one logs a warning naming the `chmod` — and the service's
+  refusal says where the token is. A request a plug answers — a test's stub —
+  reaches no service, so the node never reads or writes the default file for
+  one; a token or a file the configuration names is still sent.
 
   ## How long a call may wait
 
@@ -214,10 +212,10 @@ defmodule YmerNode.Scripts.BrowserService do
     end
   end
 
-  # § The token: a configured value, else a configured file — `nil` inside the
-  # image — else the file BROWSER_SERVICE_TOKEN_FILE names, which a node the
-  # release configuration never ran for (dev, a consumer's live run) reads here,
-  # else the default file, which a request a plug answers never reads.
+  # § The token: a configured value, else a configured file — `nil` for a node
+  # configured to read none — else the file BROWSER_SERVICE_TOKEN_FILE names,
+  # which a node whose configuration names no file (dev, a consumer's live run)
+  # reads here, else the default file, which a request a plug answers never reads.
   defp token do
     config = Application.get_env(:ymer_node, __MODULE__, [])
 

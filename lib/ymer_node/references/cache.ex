@@ -103,8 +103,8 @@ defmodule YmerNode.References.Cache do
 
   ## The cache directory
 
-  `dir/0`. The node's, not the user's: a sibling of the files directory under
-  the mount, never inside it, and rebuildable together with the node database:
+  `dir/0`. The node's, not the user's: a sibling of the files directory, never
+  inside it, and rebuildable together with the node database:
   it follows the database. At boot `YmerNode.References.Cache.Reconcile`
   removes every file in it that carries the node's naming and that no entry
   names, so a fresh node database empties it and a run cut short leaves nothing
@@ -146,11 +146,14 @@ defmodule YmerNode.References.Cache do
   # ─── Runtime configuration ──────────────────────────────────────────
 
   @doc """
-  The cache directory, an absolute path — `config :ymer_node,
-  YmerNode.References.Cache, :dir`, which `config/runtime.exs` writes from
-  `CACHE_PATH` in the prod environment and `config/dev.exs` and
-  `config/test.exs` name for their own. An absent key is a configuration
-  defect this refuses by name.
+  The cache directory — `config :ymer_node, YmerNode.References.Cache, :dir`,
+  returned as configured. The configuration that runs the node must set it to
+  an absolute path outside the files directory: the boot reconcile removes every
+  file in the cache directory that carries the node's naming and that no entry
+  names, so a cache directory inside the files directory deletes the user's
+  files, and the node does not check this. `config/dev.exs` and
+  `config/test.exs` name a directory of their own. An absent key is a
+  configuration defect this refuses by name.
   """
   def dir do
     case :ymer_node |> Application.get_env(__MODULE__, []) |> Keyword.fetch(:dir) do
@@ -160,8 +163,8 @@ defmodule YmerNode.References.Cache do
       :error ->
         raise ArgumentError,
               "no cache directory is configured: `config :ymer_node, " <>
-                "YmerNode.References.Cache, dir:` is unset — the release writes it " <>
-                "from CACHE_PATH, and dev and test each name their own"
+                "YmerNode.References.Cache, dir:` is unset — the configuration that runs " <>
+                "the node sets it, and dev and test each name their own"
     end
   end
 

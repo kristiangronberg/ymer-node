@@ -331,16 +331,6 @@ defmodule YmerNode.Scripts.GuideTest do
     end
   end
 
-  @tag doc: """
-       The release strips every BEAM chunk it does not name, and the guide is
-       read from the `Docs` chunk at the call. A failure means a release built
-       from this config would refuse every `scripts guide` — the refusal case
-       above shows what a client would meet.
-       """
-  test "the release keeps the Docs chunk the guide reads" do
-    assert get_in(Mix.Project.config(), [:releases, :ymer_node, :strip_beams]) == [keep: ["Docs"]]
-  end
-
   defp offset(text, phrase) do
     {offset, _length} = :binary.match(text, phrase)
     offset

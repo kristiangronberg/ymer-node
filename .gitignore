@@ -7,7 +7,6 @@
 
 # Files
 *.env
-/data/
 *.db
 *.db-*
 *.ez

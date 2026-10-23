@@ -13,8 +13,8 @@ defmodule YmerNode.Notebook.Repo do
 
   On a fresh store those connections race each other to set the journal mode, and
   the first boot logs `database is locked` once. It is expected and is not fixed;
-  `README.md`'s layout section documents it for the operator who meets it in a
-  container log.
+  `README.md`'s layout section documents it for the operator who meets it in
+  the node's log.
 
   ## Why the schema is not ours
 
@@ -56,10 +56,10 @@ defmodule YmerNode.Notebook.Repo do
   @restart_wait_ms 50
   @restart_poll_ms 5
 
-  # The modes SQLite accepts, as `config/runtime.exs` already bounds them. The
-  # restore interpolates the atom into a `PRAGMA`, so the read refuses anything
-  # outside this list rather than hand an unbounded value to SQL — and the
-  # guard below carries the same bound to the function that interpolates.
+  # The modes SQLite accepts. The restore interpolates the atom into a `PRAGMA`,
+  # so the read refuses anything outside this list rather than hand an unbounded
+  # value to SQL — and the guard below carries the same bound to the function
+  # that interpolates.
   @journal_modes [:wal, :delete, :truncate, :persist, :memory, :off]
 
   @doc """

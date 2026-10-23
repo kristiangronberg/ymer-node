@@ -32,8 +32,8 @@ defmodule YmerNode.Script.Harness do
   real secrets file and a real directory, for the rest of the VM:
 
       YmerNode.Script.Harness.put_request_plug(nil)
-      YmerNode.Script.Harness.put_secrets_path(Path.join(install, "data/secrets.env"))
-      YmerNode.Script.Harness.put_files_dir(Path.join(install, "data/files"))
+      YmerNode.Script.Harness.put_secrets_path(Path.join(directory, "secrets.env"))
+      YmerNode.Script.Harness.put_files_dir(Path.join(directory, "files"))
 
   Whether the run is set up is the caller's own question: `Process.whereis/1`
   of the name it gave its supervisor, and the getters the keys already have —
