@@ -17,6 +17,8 @@ defmodule YmerNode.Mcp.Tools.Scripts.Errors do
   union neither tool fully uses.
   """
 
+  alias YmerNode.Scripts.CLI
+
   def format(reason, ctx \\ %{}), do: message(reason, ctx)
 
   def message({:not_found, detail}, _ctx),
@@ -25,7 +27,7 @@ defmodule YmerNode.Mcp.Tools.Scripts.Errors do
   def message({:not_accepted, detail}, _ctx),
     do:
       "#{detail}. Accept it with `script_author accept`, or from the machine " <>
-        "itself with `ymer-node scripts accept`."
+        "itself with `#{CLI.instruction("scripts accept")}`."
 
   def message({:not_loaded, detail}, _ctx),
     do:

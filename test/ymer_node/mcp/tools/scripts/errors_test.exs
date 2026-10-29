@@ -14,7 +14,7 @@ defmodule YmerNode.Mcp.Tools.Scripts.ErrorsTest do
     message = Errors.format({:not_accepted, "hex is not accepted at its current code"})
 
     assert message =~ "script_author accept"
-    assert message =~ "ymer-node scripts accept"
+    assert message =~ "from the machine itself with `scripts accept`."
   end
 
   test "a missing script steers at list, an unknown action at describe" do

@@ -20,6 +20,8 @@ defmodule YmerNode.Scripts.CLITest do
 
   import ExUnit.CaptureIO
 
+  alias YmerNode.Mcp.Tools.Schedules.Errors, as: SchedulesErrors
+  alias YmerNode.Mcp.Tools.Scripts.Errors, as: ScriptsErrors
   alias YmerNode.Scripts
   alias YmerNode.Scripts.CLI
   alias YmerNode.Scripts.Compiler
@@ -74,8 +76,7 @@ defmodule YmerNode.Scripts.CLITest do
   describe "scripts list" do
     test "says so when there is nothing, and how to change that" do
       assert {output, 0} = CLI.run(["scripts", "list"])
-      assert output =~ "No scripts"
-      assert output =~ "scripts import"
+      assert output == "No scripts. Import one with: scripts import < file"
     end
 
     test "marks each script's state and names its actions" do
@@ -479,7 +480,7 @@ defmodule YmerNode.Scripts.CLITest do
   describe "schedules" do
     test "list says there are none, naming the verb that adds one" do
       assert {output, 0} = CLI.run(["schedules", "list"])
-      assert output =~ "No schedules. Add one with: ymer-node schedules add"
+      assert output =~ "No schedules. Add one with: schedules add"
     end
 
     test "add answers the next firing and the end, and list shows the schedule" do
@@ -603,15 +604,138 @@ defmodule YmerNode.Scripts.CLITest do
 
     test "no arguments and an unknown verb both print usage, at status 2" do
       assert {usage, 2} = CLI.run([])
-      assert usage =~ "ymer-node"
+      assert usage =~ "Every verb runs against the node already serving on this machine."
 
       assert {output, 2} = CLI.run(["scripts", "frobnicate"])
       assert output =~ "Unknown command: scripts frobnicate"
-      assert output =~ "ymer-node"
+      assert output =~ "Every verb runs against the node already serving on this machine."
+    end
+  end
+
+  describe "command/0" do
+    setup :keep_cli_env
+
+    test "is nil when the carrying release names no command" do
+      Application.delete_env(:ymer_node, CLI)
+
+      assert CLI.command() == nil
+    end
+
+    test "is the command the carrying release sets" do
+      Application.put_env(:ymer_node, CLI, command: "ymer-desktop")
+
+      assert CLI.command() == "ymer-desktop"
+    end
+  end
+
+  describe "instruction/1" do
+    setup :keep_cli_env
+
+    test "names the verb alone when the carrying release names no command" do
+      Application.delete_env(:ymer_node, CLI)
+
+      assert CLI.instruction("scripts accept") == "scripts accept"
+    end
+
+    test "names the command the carrying release sets, then the verb" do
+      Application.put_env(:ymer_node, CLI, command: "ymer-desktop")
+
+      assert CLI.instruction("scripts accept") == "ymer-desktop scripts accept"
+    end
+  end
+
+  describe "the hints and the banner" do
+    setup :keep_cli_env
+
+    test "print the command the carrying release sets" do
+      Application.put_env(:ymer_node, CLI, command: "ymer-desktop")
+
+      assert {"No scripts. Import one with: ymer-desktop scripts import < file", 0} =
+               CLI.run(["scripts", "list"])
+
+      assert {output, 0} = CLI.run(["schedules", "list"])
+      assert output =~ "No schedules. Add one with: ymer-desktop schedules add"
+
+      assert {usage, 0} = CLI.run(["help"])
+      assert usage =~ ~r/\Aymer-desktop — operator verbs for the node running on this machine\n/
+    end
+
+    test "with no command set, the banner names none" do
+      Application.delete_env(:ymer_node, CLI)
+
+      assert {usage, 0} = CLI.run(["help"])
+      assert usage =~ ~r/\AOperator verbs for the node running on this machine\n/
+      refute usage =~ "ymer-node"
+    end
+  end
+
+  describe "the MCP tools' accept-it errors" do
+    setup :keep_cli_env
+
+    test "name the command the carrying release sets" do
+      Application.put_env(:ymer_node, CLI, command: "ymer-desktop")
+      reason = {:not_accepted, "hex is not accepted at its current code"}
+
+      assert ScriptsErrors.format(reason) =~ "itself with `ymer-desktop scripts accept`."
+      assert SchedulesErrors.format(reason) =~ "with `ymer-desktop scripts accept`."
+    end
+  end
+
+  describe "a run's errors" do
+    setup :keep_cli_env
+
+    test "an open breaker names the command that resets it" do
+      Application.put_env(:ymer_node, CLI, command: "ymer-desktop")
+
+      assert Throttle.Error.open("hex", 2, 60_000).message =~
+               "an operator resets it with `ymer-desktop throttles reset hex`"
+    end
+
+    test "a missing secret names the command that sets it" do
+      segment = segment()
+      purge_on_exit(segment)
+
+      {:ok, script} =
+        Scripts.import("""
+        defmodule Script.#{segment} do
+          use YmerNode.Script
+
+          @impl true
+          def description, do: "reads a secret nobody set"
+
+          @impl true
+          def actions do
+            %{read: %{description: "answers a missing secret", properties: %{}, write: false}}
+          end
+
+          @impl true
+          def declarations, do: %{hosts: [], url_action: nil, secrets: ["ABSENT"]}
+
+          @impl true
+          def run(:read, _args, _context), do: {:error, {:secret_not_found, "ABSENT"}}
+        end
+        """)
+
+      Application.put_env(:ymer_node, CLI, command: "ymer-desktop")
+
+      assert {output, 1} = CLI.run(["scripts", "run", script.name, "read"])
+      assert output =~ "set it with `ymer-desktop secrets set ABSENT`"
     end
   end
 
   defp segment, do: "Cli#{System.unique_integer([:positive])}"
+
+  # Saves the node's `YmerNode.Scripts.CLI` env and puts it back on exit, for the
+  # cases that set or clear the carrying release's command.
+  defp keep_cli_env(_context) do
+    saved = Application.get_env(:ymer_node, CLI)
+
+    on_exit(fn ->
+      if saved,
+        do: Application.put_env(:ymer_node, CLI, saved),
+        else: Application.delete_env(:ymer_node, CLI)
+    end)
+  end
 
   # The exact bytes the overlay hands `main/1`: NUL-joined, trailing NUL, base64.
   defp packed(argv), do: Base.encode64(Enum.join(argv, <<0>>) <> <<0>>)

@@ -15,6 +15,8 @@ defmodule YmerNode.Scripts.Throttle.Error do
   `reason` is `:undeclared`, `:open` or `:deadline`, and `throttle` is the name
   the request gave.
   """
+  alias YmerNode.Scripts.CLI
+
   defexception [:reason, :throttle, :message]
 
   @doc "A request named a throttle its script's declarations do not name."
@@ -39,7 +41,7 @@ defmodule YmerNode.Scripts.Throttle.Error do
       message:
         "the throttle #{name} stopped sending after #{failures} consecutive 401s; it " <>
           "resumes in #{seconds_up(resumes_in)}s, or an operator resets it with " <>
-          "`ymer-node throttles reset #{name}`"
+          "`#{CLI.instruction("throttles reset #{name}")}`"
     }
   end
 

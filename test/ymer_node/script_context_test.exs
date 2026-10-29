@@ -319,7 +319,7 @@ defmodule YmerNode.ScriptContextTest do
       assert {:error, %Error{reason: :open, message: message}} =
                Context.request(context, url: "https://hex.test/x", throttle: name)
 
-      assert message =~ "`ymer-node throttles reset #{name}`"
+      assert message =~ "or an operator resets it with `throttles reset #{name}`"
     end
   end
 

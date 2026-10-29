@@ -11,6 +11,7 @@ defmodule YmerNode.Mcp.Tools.Schedules.Errors do
   """
 
   alias YmerNode.Mcp.Tools.Helpers
+  alias YmerNode.Scripts.CLI
 
   def format(reason, ctx \\ %{}), do: message(reason, ctx)
 
@@ -35,7 +36,7 @@ defmodule YmerNode.Mcp.Tools.Schedules.Errors do
   def message({:not_accepted, detail}, _ctx),
     do:
       "#{detail}. Accept it with `script_author accept`, or from the machine itself " <>
-        "with `ymer-node scripts accept`."
+        "with `#{CLI.instruction("scripts accept")}`."
 
   def message({:not_loaded, detail}, _ctx),
     do: "#{detail}. `scripts describe` shows why it will not run."

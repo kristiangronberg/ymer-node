@@ -173,7 +173,7 @@ defmodule YmerNode.Scripts.ThrottleTest do
                Throttle.take(name, throttle, deadline(1_000))
 
       assert message =~ "stopped sending after 2 consecutive 401s"
-      assert message =~ "`ymer-node throttles reset #{name}`"
+      assert message =~ "or an operator resets it with `throttles reset #{name}`"
     end
 
     @tag doc: """

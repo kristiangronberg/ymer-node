@@ -117,6 +117,7 @@ defmodule YmerNode.Scripts.Runner do
   `inspect/1`'d as it came.
   """
   alias YmerNode.Script.Context
+  alias YmerNode.Scripts.CLI
   alias YmerNode.Scripts.Loader
   alias YmerNode.Scripts.Script
 
@@ -380,7 +381,7 @@ defmodule YmerNode.Scripts.Runner do
   # not have to read the code to learn which one was missing.
   defp script_error(script, action, {:secret_not_found, secret}) do
     "#{where(script, action)}: no #{secret} secret is set on this machine — " <>
-      "set it with `ymer-node secrets set #{secret}`"
+      "set it with `#{CLI.instruction("secrets set #{secret}")}`"
   end
 
   defp script_error(script, action, {:secret_undeclared, secret}) do

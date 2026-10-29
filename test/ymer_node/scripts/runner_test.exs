@@ -561,6 +561,30 @@ defmodule YmerNode.Scripts.RunnerTest do
       assert {:error, {:timeout, message}} = Runner.run(script, "slow", %{})
       assert message =~ "no answer in 50 ms"
     end
+
+    test "names the verb that sets a secret the run found missing" do
+      script =
+        accepted("""
+          @impl true
+          def description, do: "reads a secret nobody set"
+
+          @impl true
+          def actions do
+            %{read: %{description: "answers a missing secret", properties: %{}, write: false}}
+          end
+
+          @impl true
+          def declarations, do: %{hosts: [], url_action: nil, secrets: ["ABSENT"]}
+
+          @impl true
+          def run(:read, _args, _context), do: {:error, {:secret_not_found, "ABSENT"}}
+        """)
+
+      assert {:error, {:script_error, message}} = Runner.run(script, "read", %{})
+
+      assert message =~
+               "no ABSENT secret is set on this machine — set it with `secrets set ABSENT`"
+    end
   end
 
   describe "in_flight?/1" do

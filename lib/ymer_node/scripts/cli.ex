@@ -23,6 +23,13 @@ defmodule YmerNode.Scripts.CLI do
   over the release **last**, so an overlay named after the release would
   silently replace the release's own launcher.
 
+  The release names the command too, in this module's app env key `:command`.
+  Every instruction the node gives a person — this module's hints and help
+  banner, an MCP tool's error naming the verb that accepts a script, a run's
+  missing-secret and open-breaker errors — is written through `instruction/1`,
+  so it names the command that release provides, and with none set, the verb
+  alone. The node names no command of its own: no install of it provides one.
+
   ## The argv seam
 
   `rpc` takes an Elixir expression as a string, so the shell's arguments have to
@@ -82,6 +89,28 @@ defmodule YmerNode.Scripts.CLI do
   alias YmerNode.Scripts.BrowserService
   alias YmerNode.Scripts.Throttle
   alias YmerNode.Secrets
+
+  # ─── Runtime configuration ──────────────────────────────────────────
+
+  @doc """
+  The command the release carrying the node names (`config :ymer_node,
+  YmerNode.Scripts.CLI, :command`), `nil` when nothing sets it, in which case
+  every instruction names the verb alone.
+  """
+  def command, do: :ymer_node |> Application.get_env(__MODULE__, []) |> Keyword.get(:command)
+
+  @doc """
+  What a person types on this machine to run `verb`: the carrying release's
+  command, then the verb, or the verb alone where the release names no command.
+  """
+  def instruction(verb) when is_binary(verb) do
+    case command() do
+      nil -> verb
+      command -> "#{command} #{verb}"
+    end
+  end
+
+  # ─── Public API ─────────────────────────────────────────────────────
 
   @doc """
   The entry point the overlay calls: unpacks argv, runs the verb, prints, exits.
@@ -179,7 +208,7 @@ defmodule YmerNode.Scripts.CLI do
 
   defp scripts_list do
     case Scripts.list() do
-      [] -> {"No scripts. Import one with: ymer-node scripts import < file", 0}
+      [] -> {"No scripts. Import one with: #{instruction("scripts import < file")}", 0}
       scripts -> {Enum.map_join(scripts, "\n", &list_line/1), 0}
     end
   end
@@ -419,8 +448,8 @@ defmodule YmerNode.Scripts.CLI do
   defp schedules_list do
     case Schedules.list() do
       [] ->
-        {"No schedules. Add one with: ymer-node schedules add <name> <script> <action> " <>
-           "'<cron expression>'", 0}
+        {"No schedules. Add one with: " <>
+           instruction("schedules add <name> <script> <action> '<cron expression>'"), 0}
 
       schedules ->
         {Enum.map_join(schedules, "\n", &schedule_lines/1), 0}
@@ -520,7 +549,7 @@ defmodule YmerNode.Scripts.CLI do
 
   defp usage do
     """
-    ymer-node — operator verbs for the node running on this machine
+    #{banner()}
 
       scripts list
       scripts describe <name> [--code]
@@ -546,5 +575,12 @@ defmodule YmerNode.Scripts.CLI do
 
     Every verb runs against the node already serving on this machine.\
     """
+  end
+
+  defp banner do
+    case command() do
+      nil -> "Operator verbs for the node running on this machine"
+      command -> "#{command} — operator verbs for the node running on this machine"
+    end
   end
 end

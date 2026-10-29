@@ -34,9 +34,11 @@ where the node reads it: the port, `YmerNode.Mcp`; the two databases,
 files directory, `YmerNode.Script.Context.files_dir/1`; the cache directory,
 `YmerNode.References.Cache.dir/0`; and, where wanted, the time zone,
 `YmerNode.Script.Context.time_zone/1`, extra CA certificates,
-`YmerNode.ExtraCaCertificates.path/0`, and the browser service's address,
-`YmerNode.Scripts.BrowserService.url/0`. `config/dev.exs` sets all but the time
-zone and the extra CA certificates for this checkout's own node. The node reads
+`YmerNode.ExtraCaCertificates.path/0`, the browser service's address,
+`YmerNode.Scripts.BrowserService.url/0`, and the command a person types for the
+operator's verbs, `YmerNode.Scripts.CLI.command/0`. `config/dev.exs` sets all
+but the time zone, the extra CA certificates and the command for this
+checkout's own node. The node reads
 every value as given: each path must be absolute, and each directory must
 exist before the node starts.
 
@@ -92,24 +94,24 @@ nothing it does leaves this machine or runs anything. A prompt on every check
 would make you the courier between sessions again — the job the tool exists to
 take off you.
 
-The operator's verbs run on the machine itself, through the overlay the release
-provides beside its launcher (`YmerNode.Scripts.CLI`) — `ymer-node` below,
-whatever the release names it — and are the door for anything that should not
-travel through a model's context:
+The operator's verbs run on the machine itself, through the command the release
+carrying the node provides beside its launcher (`YmerNode.Scripts.CLI`), such as
+Ymer Desktop's `ymer-desktop`. They are the door for anything that should not
+travel through a model's context, and each is typed after that command:
 
 ```sh
-ymer-node scripts list
-ymer-node scripts import < /path/to/script.exs
-printf 'the-value' | ymer-node secrets set NAME
-ymer-node throttles list
-ymer-node schedules list
+scripts list
+scripts import < /path/to/script.exs
+printf 'the-value' | secrets set NAME
+throttles list
+schedules list
 ```
 
 A secret's value is read from stdin and never taken as an argument: an argument
 is visible in `ps` to every user on the machine, and in your shell's history to
 you. An imported script arrives on stdin the same way; `scripts import <file>`
 takes a path on the node's own filesystem instead. With nothing on stdin, the
-verb says so. `ymer-node help` lists every verb.
+verb says so. `help` lists every verb.
 
 A script may send its requests through a throttle it declares, which the node
 starts the first time a request names it. When a run is refused because a
@@ -219,8 +221,8 @@ Sharing a script is sharing its code. From a session, `scripts describe` with
 unchanged:
 
 ```sh
-ymer-node scripts export hex > hex.exs   # sending machine
-ymer-node scripts import < hex.exs       # receiving one
+scripts export hex > hex.exs   # sending machine
+scripts import < hex.exs       # receiving one
 ```
 
 The two halves are two machines. Importing an exported script back into the

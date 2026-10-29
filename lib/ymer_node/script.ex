@@ -192,7 +192,7 @@ defmodule YmerNode.Script do
   A script that reaches a system needing a secret names it in `declarations/0`
   and reads it at the run with `YmerNode.Script.Context.secret/2` — never from
   an argument, never from its own text. The value is set on the machine the
-  node runs on, by a person, with the CLI — `ymer-node secrets set <NAME>`,
+  node runs on, by a person, with the CLI — its `secrets set <NAME>` verb,
   the value on stdin — and it passes through no client and no script. A
   declared secret nobody set fails the run plainly, naming the secret and
   that verb.
@@ -201,7 +201,7 @@ defmodule YmerNode.Script do
 
   A script is its code, and sharing one is handing the code over. From a
   session, `scripts describe` with `code: true` answers it beside the
-  description; on the machine, `ymer-node scripts export <name>` prints
+  description; on the machine, the CLI's `scripts export <name>` prints
   exactly the bytes the node holds, so `> file` there and `scripts import < file`
   elsewhere move it unchanged. On the receiving node the session runs
   `script_author check`, then `create` — acceptance is that node's own act,
