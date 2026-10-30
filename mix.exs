@@ -71,21 +71,21 @@ defmodule YmerNode.MixProject do
 
   defp deps do
     [
-      {:bandit, "~> 1.12.5"},
+      {:bandit, "~> 1.14"},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:crontab, "~> 1.2.1"},
       {:ecto_sql, "~> 3.13"},
-      {:ecto_sqlite3, "~> 0.25"},
+      {:ecto_sqlite3, "~> 0.26"},
       {:elixlsx, "~> 0.6.0"},
       {:ex_doc, "~> 0.40.4", only: [:dev, :test], runtime: false},
       {:ex_slop, "~> 0.4.5", only: [:dev, :test], runtime: false},
-      {:floki, "~> 0.38.4"},
-      {:jsv, "~> 0.22"},
+      {:floki, "~> 0.38"},
+      {:jsv, "~> 0.26"},
       # Markdown a script turns into what a system accepts — HTML, or a tree a
       # renderer walks into a wiki's markup. A NIF: the build downloads its
       # precompiled artifact for the building machine's target, so no Rust
       # toolchain is needed to build it.
-      {:mdex, "~> 0.13.5"},
+      {:mdex, "~> 0.14"},
       {:mix_audit, "~> 2.1", only: [:dev, :test], runtime: false},
       {:mix_test_watch, "~> 1.0", only: :dev, runtime: false},
       # CSV a script reads or writes — `NimbleCSV.RFC4180` ready-made, and a
