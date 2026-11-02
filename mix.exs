@@ -117,7 +117,7 @@ defmodule YmerNode.MixProject do
       # `mix tz.download <version>` into `config :tz, :data_dir`, with
       # `:iana_version`.
       {:tz, "~> 0.28.2"},
-      {:wymcp, "~> 0.9.1"},
+      {:wymcp, "~> 0.10.0"},
       {:xlsx_reader, "~> 0.8.12"}
     ]
   end

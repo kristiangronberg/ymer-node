@@ -1,7 +1,8 @@
 defmodule YmerNode.McpTest do
   @moduledoc """
-  Reads the mount's options back through `YmerNode.Mcp.init/1` — the wire values
-  the server actually serves, not the source that produced them. No database and
+  Reads the mount's options back through `Wymcp.Testing.registrations/1` and
+  `Wymcp.Testing.instructions/1` — the wire values the server actually serves,
+  not the source that produced them. No database and
   no listener: the mount freezes its options at compile time, so every assertion
   here is a pure read.
   """
@@ -11,11 +12,9 @@ defmodule YmerNode.McpTest do
   # each — a cliff, not a warning.
   @mcp_text_budget 2048
 
-  defp mount_opts, do: YmerNode.Mcp.init([])
-
   describe "the MCP mount" do
     test "instructions fit the 2KB client budget" do
-      instructions = Keyword.fetch!(mount_opts(), :instructions)
+      instructions = Wymcp.Testing.instructions(YmerNode.Mcp)
       assert byte_size(instructions) <= @mcp_text_budget
     end
 
@@ -27,7 +26,7 @@ defmodule YmerNode.McpTest do
          relaxing the assertion.
          """
     test "instructions name ymer as the other half of one product" do
-      instructions = Keyword.fetch!(mount_opts(), :instructions)
+      instructions = Wymcp.Testing.instructions(YmerNode.Mcp)
       # Not a bare =~ "ymer": the offline paragraph mentions ymer too, so that
       # match cannot fail. This pins the cross-reference sentence itself, and
       # keeps "ymer" inside the pinned substring so a rewording that drops the
@@ -49,15 +48,15 @@ defmodule YmerNode.McpTest do
     end
 
     test "every tool description fits the 2KB client budget" do
-      tools = Keyword.fetch!(mount_opts(), :tools)
+      tools = Wymcp.Testing.registrations(YmerNode.Mcp)
 
       # Without this the loop below passes vacuously on an empty list — the
       # budget guard would stop guarding without ever going red.
       assert tools != []
 
       for tool <- tools do
-        assert byte_size(tool.description()) <= @mcp_text_budget,
-               "#{tool.name()}: #{byte_size(tool.description())} bytes"
+        assert byte_size(tool.description) <= @mcp_text_budget,
+               "#{tool.name}: #{byte_size(tool.description)} bytes"
       end
     end
 
@@ -69,7 +68,7 @@ defmodule YmerNode.McpTest do
          the suite would go red.
          """
     test "every capability is mounted" do
-      names = mount_opts() |> Keyword.fetch!(:tools) |> Enum.map(& &1.name())
+      names = YmerNode.Mcp |> Wymcp.Testing.registrations() |> Enum.map(& &1.name)
 
       # `help` is not declared at the mount: Wymcp appends it to every server
       # under that reserved name, so it is part of the surface a client meets
@@ -93,7 +92,7 @@ defmodule YmerNode.McpTest do
          answers, but nothing tells a worker to reach for it.
          """
     test "the instructions name every capability" do
-      instructions = Keyword.fetch!(mount_opts(), :instructions)
+      instructions = Wymcp.Testing.instructions(YmerNode.Mcp)
 
       assert instructions =~ "notebook"
       assert instructions =~ "references"
@@ -110,7 +109,7 @@ defmodule YmerNode.McpTest do
          write from the tool notes alone, which no longer carry the contract.
          """
     test "the instructions name the guide as the call before writing a script" do
-      instructions = Keyword.fetch!(mount_opts(), :instructions)
+      instructions = Wymcp.Testing.instructions(YmerNode.Mcp)
 
       assert instructions =~ "scripts guide"
       assert instructions =~ "scripts info"
@@ -125,7 +124,7 @@ defmodule YmerNode.McpTest do
          drop a tool from the list.
          """
     test "the instructions still have room to say more" do
-      instructions = Keyword.fetch!(mount_opts(), :instructions)
+      instructions = Wymcp.Testing.instructions(YmerNode.Mcp)
 
       assert byte_size(instructions) > 1900,
              "the instructions shrank; check that no capability's bullet was dropped"
