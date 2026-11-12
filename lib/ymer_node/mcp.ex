@@ -1,12 +1,36 @@
 defmodule YmerNode.Mcp do
   @moduledoc """
-  The MCP mount — the node's entire external surface.
+  The node's mount module — its entire external surface.
 
   The tool list is declared here and nowhere else, and it is read at this module's
   compile: a tool whose action schemas are malformed fails the build rather than
   the first request. That is also why the list is written out literally instead of
   read from configuration — naming the modules here is what records the
   compile-time dependency that keeps the check from going stale.
+
+  ## A carrying application's tools
+
+  The [*carrying application*](docs/glossary.md#carrying-application) can serve
+  tools of its own on the same `/mcp`. It writes a mount module of its own with
+  `use Wymcp.Router`, listing `tools/0` and then its own tools, with
+  `YmerNode.Mcp.McpServer.instructions/0` as its instructions and
+  `server_info/0` as its serverInfo, and names that module in
+  `config :ymer_node, YmerNode.Mcp, :mount`. wymcp validates every tool's
+  schemas, and refuses a tool name used twice, while that module compiles, in
+  the carrying application's build. The listener, its port and its bind address
+  stay this module's.
+
+  The named module must serve every tool in `tools/0`: the instructions describe
+  them all, so a node carried anywhere serves the same surface. `mount/0` checks
+  that as the listener starts. A mount module that lists the tools literally
+  instead of calling `tools/0` is refused there once a release of `ymer_node`
+  adds a tool.
+
+  The listener starts with `ymer_node`, and `ymer_node` has started before the
+  carrying application that depends on it starts, so `/mcp` answers before the
+  carrying application's own processes exist. A tool of its own must answer a
+  call made before its application is up; `ymer_node` does not hold the listener
+  back for it.
 
   ## Loopback is the security model
 
@@ -26,6 +50,10 @@ defmodule YmerNode.Mcp do
   key from the application environment alone, and no variable of its own turns
   it on. The configuration that runs the node must not fill the key from the
   environment either, or a variable set at start would be enough to widen it.
+  The `:mount` key, read by `mount/0`, stands on the same footing: the mount
+  module it names sets `/mcp`'s own `:auth` and `:origin`, so naming one decides
+  how `/mcp` is guarded, and it too is a committed configuration that the
+  environment must never fill.
 
   Widening either layer without adding authentication first is the mistake both
   paragraphs exist to prevent. **Scripts do not widen either layer, and they are
@@ -40,28 +68,35 @@ defmodule YmerNode.Mcp do
   """
   # Aliased ahead of `use` rather than after it, against the usual module layout:
   # the router's options are evaluated in this module's context at compile time,
-  # so an alias written below the `use` line would not be in scope for them.
+  # so an alias written below the `use` line would not be in scope for them. The
+  # two attributes sit there for the same reason, and `tools/0` and
+  # `server_info/0` read them back, since a function of this module cannot be
+  # called while the module is still compiling.
   alias YmerNode.Mcp.McpServer
 
+  @tools [
+    YmerNode.Mcp.Tools.Messages,
+    YmerNode.Mcp.Tools.Notebook,
+    YmerNode.Mcp.Tools.References,
+    YmerNode.Mcp.Tools.Schedules,
+    YmerNode.Mcp.Tools.ScriptAuthor,
+    YmerNode.Mcp.Tools.Scripts
+  ]
+
+  @server_info %{
+    title: "Ymer Node",
+    description:
+      "Local capability for LLM workers: a private SQL notebook with vector " <>
+        "search, a registry of pointers at where knowledge lives with a cache of " <>
+        "what they say, and the " <>
+        "scripts this node has accepted. All of it stays on this machine. " <>
+        "The local half of Ymer."
+  }
+
   use Wymcp.Router,
-    tools: [
-      YmerNode.Mcp.Tools.Messages,
-      YmerNode.Mcp.Tools.Notebook,
-      YmerNode.Mcp.Tools.References,
-      YmerNode.Mcp.Tools.Schedules,
-      YmerNode.Mcp.Tools.ScriptAuthor,
-      YmerNode.Mcp.Tools.Scripts
-    ],
+    tools: @tools,
     instructions: McpServer.instructions(),
-    server_info: %{
-      title: "Ymer Node",
-      description:
-        "Local capability for LLM workers: a private SQL notebook with vector " <>
-          "search, a registry of pointers at where knowledge lives with a cache of " <>
-          "what they say, and the " <>
-          "scripts this node has accepted. All of it stays on this machine. " <>
-          "The local half of Ymer."
-    }
+    server_info: @server_info
 
   # ─── Runtime configuration ──────────────────────────────────────────
 
@@ -86,5 +121,96 @@ defmodule YmerNode.Mcp do
     :ymer_node
     |> Application.get_env(__MODULE__, [])
     |> Keyword.get(:ip, {127, 0, 0, 1})
+  end
+
+  @doc """
+  The mount module `/mcp` serves (`config :ymer_node, YmerNode.Mcp, :mount`),
+  this module where the key is unset. Read once, as the listener starts.
+
+  Raises unless the named module exists, is a mount module, and serves every
+  tool in `tools/0`, so a wrong name stops the node at start instead of serving
+  a surface nobody chose. There is no fallback to this module: it would drop the
+  carrying application's tools without a word.
+
+  Like `ip/0`, deliberately not read from the environment: naming the module
+  decides how `/mcp` is guarded. The module doc's § Loopback is the security
+  model says why that costs a committed configuration.
+  """
+  def mount do
+    :ymer_node
+    |> Application.get_env(__MODULE__, [])
+    |> Keyword.get(:mount, __MODULE__)
+    |> check_mount!()
+  end
+
+  # ─── Public API ─────────────────────────────────────────────────────
+
+  @doc """
+  The node's tools, in the order this module serves them — the list a carrying
+  application's mount module starts its `:tools` from. Calling it there records
+  a compile-time dependency on this module, and through it on each tool, so an
+  edit to a tool recompiles that mount module too.
+
+  It exists to compose the mount module the node's own listener serves. Any
+  listener that serves these tools is bound by the loopback model in this
+  module's doc: the tools carry no authentication of their own.
+
+  ## Examples
+
+      iex> YmerNode.Mcp.Tools.Notebook in YmerNode.Mcp.tools()
+      true
+
+  """
+  def tools, do: @tools
+
+  @doc """
+  The serverInfo `title` and `description` this module serves, for a carrying
+  application's mount module to pass unchanged. serverInfo's `name` and
+  `version` are not in it: wymcp reads those from `config :wymcp`, which the
+  carrying application sets for its own release.
+
+  ## Examples
+
+      iex> YmerNode.Mcp.server_info().title
+      "Ymer Node"
+
+  """
+  def server_info, do: @server_info
+
+  # ─── Private ────────────────────────────────────────────────────────
+
+  defp check_mount!(mount) when is_atom(mount) do
+    if Code.ensure_loaded?(mount) do
+      mount |> served_tools() |> check_served!(mount)
+    else
+      refuse_mount!(mount, "names no module that exists")
+    end
+  end
+
+  defp check_mount!(mount), do: refuse_mount!(mount, "is not a module name")
+
+  defp check_served!(:not_a_mount, mount),
+    do: refuse_mount!(mount, "is not a mount module: it does not `use Wymcp.Router`")
+
+  defp check_served!(served, mount) do
+    case @tools -- served do
+      [] -> mount
+      missing -> refuse_mount!(mount, "does not serve #{inspect(missing)}")
+    end
+  end
+
+  # `Wymcp.Testing.registrations/1` is wymcp's one public read of what a mount
+  # module serves. The options a mount module's `init/1` returns are the
+  # router's own, and wymcp may change their keys in any release, so reading
+  # them here could break silently on a wymcp upgrade.
+  defp served_tools(mount) do
+    mount |> Wymcp.Testing.registrations() |> Enum.map(& &1.module)
+  rescue
+    Wymcp.ConfigurationError -> :not_a_mount
+  end
+
+  defp refuse_mount!(mount, problem) do
+    raise ArgumentError,
+          "config :ymer_node, YmerNode.Mcp, :mount names #{inspect(mount)}, which #{problem}"
   end
 end

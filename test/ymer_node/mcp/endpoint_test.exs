@@ -1,0 +1,87 @@
+defmodule YmerNode.Mcp.EndpointTest do
+  @moduledoc """
+  Drives the endpoint as Bandit does, through `init/1` once and `call/2` per
+  request, with no listener: `Plug.Test` builds each request. The mount modules
+  are the node's own, `YmerNode.Mcp`, and `YmerNode.CarryingMount` from
+  `test/support`, standing in for a carrying application's.
+  """
+  use ExUnit.Case, async: true
+
+  import Plug.Conn
+  import Plug.Test
+
+  alias YmerNode.Mcp.Endpoint
+
+  defp post_mcp(endpoint_options, body) do
+    :post
+    |> conn("/mcp", JSON.encode!(body))
+    |> put_req_header("content-type", "application/json")
+    |> put_req_header("accept", "application/json, text/event-stream")
+    |> Wymcp.Testing.put_mirrored_headers(body)
+    |> Endpoint.call(endpoint_options)
+  end
+
+  describe "call/2" do
+    test "serves the node's own tools on /mcp when started with YmerNode.Mcp" do
+      options = Endpoint.init(YmerNode.Mcp)
+      conn = post_mcp(options, Wymcp.Testing.build_request("tools/list"))
+
+      assert conn.status == 200
+      names = for tool <- JSON.decode!(conn.resp_body)["result"]["tools"], do: tool["name"]
+
+      assert names == [
+               "messages",
+               "notebook",
+               "references",
+               "schedules",
+               "script_author",
+               "scripts",
+               "help"
+             ]
+    end
+
+    @tag doc: """
+         Guards the hand-off wymcp fails open on: a mount module handed options
+         its own `init([])` did not build is served with an empty tool list, not
+         refused. A failure listing no tools means the endpoint stopped passing
+         the options `init/1` built.
+         """
+    test "serves the mount module it was started with on /mcp" do
+      options = Endpoint.init(YmerNode.CarryingMount)
+      conn = post_mcp(options, Wymcp.Testing.build_request("tools/list"))
+
+      assert conn.status == 200
+      names = for tool <- JSON.decode!(conn.resp_body)["result"]["tools"], do: tool["name"]
+      assert "ui" in names
+      assert "notebook" in names
+    end
+
+    test "runs the carrying application's own tool" do
+      options = Endpoint.init(YmerNode.CarryingMount)
+      body = Wymcp.Testing.build_action_request("ui", "show")
+
+      assert options |> post_mcp(body) |> Wymcp.Testing.text_response() =~ "ok"
+    end
+
+    @tag doc: """
+         Guards a leak found at review: wymcp hands every assign it does not own
+         to each tool's context, so an endpoint that keeps its `:mcp_mount`
+         assign hands every tool the mount module's whole router options. A
+         failure listing `:mcp_mount` means the `/mcp` route stopped popping it
+         before the forward.
+         """
+    test "hands a tool no assign of its own" do
+      options = Endpoint.init(YmerNode.CarryingMount)
+      body = Wymcp.Testing.build_action_request("ui", "assigns")
+
+      refute options |> post_mcp(body) |> Wymcp.Testing.text_response() =~ "mcp_mount"
+    end
+
+    test "answers 404 off /mcp" do
+      options = Endpoint.init(YmerNode.Mcp)
+      conn = :get |> conn("/") |> Endpoint.call(options)
+
+      assert conn.status == 404
+    end
+  end
+end

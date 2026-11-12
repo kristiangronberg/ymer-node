@@ -58,6 +58,12 @@ _Avoid_: cache folder, references folder, files directory (for it)
 `YmerNode.References.CacheEntry`
 _Avoid_: entry (bare, for a reference), cached copy, snapshot
 
+### carrying application
+The application whose release carries `ymer_node` and configures it through
+`config :ymer_node`; this repository ships no release of its own, so every node
+runs inside one.
+_Avoid_: host app, embedding app, consumer (for it), the app (bare)
+
 ### CLI
 The node's operator verbs, `YmerNode.Scripts.CLI.main/1`, reached through an
 rpc overlay that the release carrying `ymer_node` provides — run by a human on
@@ -181,6 +187,11 @@ _Avoid_: find-don't-re-document, pointer rule
 ### message
 `YmerNode.Messages.Message`
 _Avoid_: store, mailbox, inbox (for what holds messages); post, note
+
+### mount module
+Defined by wymcp; its definition lives there, not here. This node's own is
+`YmerNode.Mcp`.
+_Avoid_: server module (for this concept), router module, endpoint module
 
 ## N
 

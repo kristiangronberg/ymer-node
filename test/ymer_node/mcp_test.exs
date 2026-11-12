@@ -8,6 +8,8 @@ defmodule YmerNode.McpTest do
   """
   use ExUnit.Case, async: true
 
+  doctest YmerNode.Mcp
+
   # Claude Code truncates server instructions and tool descriptions at 2KB
   # each — a cliff, not a warning.
   @mcp_text_budget 2048
@@ -128,6 +130,25 @@ defmodule YmerNode.McpTest do
 
       assert byte_size(instructions) > 1900,
              "the instructions shrank; check that no capability's bullet was dropped"
+    end
+  end
+
+  describe "tools/0" do
+    test "is every tool this mount module serves but help, in its order" do
+      served =
+        YmerNode.Mcp
+        |> Wymcp.Testing.registrations()
+        |> Enum.map(& &1.module)
+        |> Enum.reject(&(&1 == Wymcp.Help))
+
+      assert YmerNode.Mcp.tools() == served
+    end
+  end
+
+  describe "server_info/0" do
+    test "is the title and description this mount module serves" do
+      assert %{title: "Ymer Node", description: description} = YmerNode.Mcp.server_info()
+      assert description =~ "The local half of Ymer."
     end
   end
 end

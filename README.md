@@ -35,9 +35,11 @@ files directory, `YmerNode.Script.Context.files_dir/1`; the cache directory,
 `YmerNode.References.Cache.dir/0`; and, where wanted, the time zone,
 `YmerNode.Script.Context.time_zone/1`, extra CA certificates,
 `YmerNode.ExtraCaCertificates.path/0`, the browser service's address,
-`YmerNode.Scripts.BrowserService.url/0`, and the command a person types for the
-operator's verbs, `YmerNode.Scripts.CLI.command/0`. `config/dev.exs` sets all
-but the time zone, the extra CA certificates and the command for this
+`YmerNode.Scripts.BrowserService.url/0`, the command a person types for the
+operator's verbs, `YmerNode.Scripts.CLI.command/0`, and the mount module a
+[*carrying application*](docs/glossary.md#carrying-application) serves tools of
+its own from, `YmerNode.Mcp.mount/0`. `config/dev.exs` sets all but the time
+zone, the extra CA certificates, the command and the mount module for this
 checkout's own node. The node reads
 every value as given: each path must be absolute, and each directory must
 exist before the node starts.

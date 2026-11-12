@@ -4,7 +4,7 @@ defmodule YmerNode.MixProject do
   def project do
     [
       app: :ymer_node,
-      version: "0.7.4",
+      version: "0.7.5",
       elixir: "~> 1.19",
       elixirc_paths: elixirc_paths(Mix.env()),
       aliases: aliases(),

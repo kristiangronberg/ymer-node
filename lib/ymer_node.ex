@@ -267,8 +267,12 @@ defmodule YmerNode do
 
   ## The MCP surface
 
-  `YmerNode.Mcp` is the mount: the node's entire external surface, and the one
-  place its tool list is declared. `YmerNode.Mcp.McpServer` holds the instructions
+  `YmerNode.Mcp` is the node's mount module: its entire external surface, and the
+  one place its tool list is declared. A
+  [*carrying application*](docs/glossary.md#carrying-application) that serves
+  tools of its own names a mount module of its own instead (`YmerNode.Mcp.mount/0`),
+  built from that list, and `YmerNode.Mcp.Endpoint` serves whichever one the
+  listener started with. `YmerNode.Mcp.McpServer` holds the instructions
   a client is handed at connect — including the paragraph naming ymer as the other
   half of the product, which is the only way a client learns the node is not the
   whole story. `YmerNode.Mcp.Tools.Notebook`, `YmerNode.Mcp.Tools.References`,

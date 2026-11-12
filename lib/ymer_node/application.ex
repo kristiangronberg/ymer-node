@@ -13,9 +13,11 @@ defmodule YmerNode.Application do
   # listener, because a `scripts run` must never reach a VM that has not
   # compiled what it is about to run. The notebook's repo comes up before the
   # probe that queries it and before the lock that guards its files; and the
-  # HTTP listener is last so the node never accepts a call it cannot yet serve —
-  # which includes a references call, whose registry the migrator has to have
-  # built.
+  # HTTP listener is last so the node never accepts a call to one of its own
+  # tools it cannot yet serve — which includes a references call, whose registry
+  # the migrator has to have built. A carrying application's own tools start
+  # later still, with their application, after this whole tree (`YmerNode.Mcp`'s
+  # doc, § A carrying application's tools).
   #
   # The extra CA certificates load first, ahead of every other child: the CA
   # cache they join is read by every request made through Mint, and fills
@@ -101,8 +103,13 @@ defmodule YmerNode.Application do
 
   # The bind address is not a preference — it is half the compensating control for
   # an unauthenticated /mcp, and which half depends on where the node runs.
-  # `YmerNode.Mcp` owns that decision; this function only asks it.
+  # `YmerNode.Mcp` owns that decision; this function only asks it. It asks the
+  # same of the mount module /mcp serves, and this call is the one read of it:
+  # a wrong one raises here and stops the application before anything listens.
   defp mcp_endpoint do
-    {Bandit, plug: YmerNode.Mcp.Endpoint, ip: YmerNode.Mcp.ip(), port: YmerNode.Mcp.port()}
+    {Bandit,
+     plug: {YmerNode.Mcp.Endpoint, YmerNode.Mcp.mount()},
+     ip: YmerNode.Mcp.ip(),
+     port: YmerNode.Mcp.port()}
   end
 end
