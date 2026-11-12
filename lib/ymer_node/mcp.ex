@@ -32,6 +32,32 @@ defmodule YmerNode.Mcp do
   call made before its application is up; `ymer_node` does not hold the listener
   back for it.
 
+  ## A carrying application's pages
+
+  The carrying application can serve pages of its own on the node's port too. It
+  names a plug, its pages plug (`pages/0`), in
+  `config :ymer_node, YmerNode.Mcp, :pages`; `YmerNode.Mcp.Endpoint` says which
+  paths reach it, and what they answer where none is named. A Phoenix endpoint
+  started with `server: false` is such a plug, and its LiveView socket is a path
+  like any other. A mount module belongs in `:mount`: `pages/0` does not refuse
+  one named in `:pages`, where it would answer `/` as it answers `/mcp` and turn
+  other paths away.
+
+  The pages plug guards its own paths, since `/mcp`'s guards do not reach them.
+  A page that carries notebook rows should check each request's Host against the
+  loopback address (`127.0.0.1`, `[::1]`) and `localhost`, with the port the node
+  is reached on, and keep its socket's origin check. That Host check does not
+  follow `ip/0`: a container's widened bind (`0.0.0.0`) is never a Host to
+  accept, and the port a host publishes may differ from `port/0`. The loopback
+  pin and the host publish's `127.0.0.1:` prefix (§ Loopback is the security
+  model) protect the pages plug's paths exactly as they do `/mcp`; a Host or
+  origin check guards only against other web pages in a browser on this
+  machine, never against a client that can reach the port. The listener starts
+  before the carrying application, as it does for that application's tools, and
+  stops after it, so the pages plug must answer a request made before its
+  application has started or after it has stopped; an unstarted Phoenix
+  endpoint answers 500.
+
   ## Loopback is the security model
 
   `/mcp` carries no authentication. The compensating control is that the node is
@@ -54,6 +80,9 @@ defmodule YmerNode.Mcp do
   module it names sets `/mcp`'s own `:auth` and `:origin`, so naming one decides
   how `/mcp` is guarded, and it too is a committed configuration that the
   environment must never fill.
+  The `:pages` key, read by `pages/0`, stands there as well: the pages plug it
+  names decides how every path but `/mcp` is guarded, so it is a committed
+  configuration that the environment must never fill.
 
   Widening either layer without adding authentication first is the mistake both
   paragraphs exist to prevent. **Scripts do not widen either layer, and they are
@@ -143,6 +172,29 @@ defmodule YmerNode.Mcp do
     |> check_mount!()
   end
 
+  @doc """
+  The pages plug: the carrying application's plug that `YmerNode.Mcp.Endpoint`
+  hands every request whose path is not `/mcp` or under it, named in
+  `config :ymer_node, YmerNode.Mcp, :pages`; none where the key is unset or
+  `nil`. Read once, as the listener starts, and `nil` where there is none.
+
+  Raises unless the named module exists and exports both `init/1` and `call/2`,
+  so a wrong name stops the node at start instead of answering 404 in its
+  place. `nil` is the one value it accepts that `mount/0` refuses: a later
+  config file cannot remove a key it inherits, only set it, so `nil` is how one
+  turns an inherited pages plug off.
+
+  Like `mount/0`, deliberately not read from the environment: the pages plug
+  decides how every path but `/mcp` is guarded. The module doc's § Loopback is
+  the security model says why that costs a committed configuration.
+  """
+  def pages do
+    :ymer_node
+    |> Application.get_env(__MODULE__, [])
+    |> Keyword.get(:pages)
+    |> check_pages!()
+  end
+
   # ─── Public API ─────────────────────────────────────────────────────
 
   @doc """
@@ -212,5 +264,30 @@ defmodule YmerNode.Mcp do
   defp refuse_mount!(mount, problem) do
     raise ArgumentError,
           "config :ymer_node, YmerNode.Mcp, :mount names #{inspect(mount)}, which #{problem}"
+  end
+
+  # Exports alone, as Plug itself reads a module plug: it calls `init/1` and
+  # `call/2` and never reads `@behaviour Plug`, so requiring the attribute would
+  # refuse a working plug.
+  defp check_pages!(nil), do: nil
+
+  defp check_pages!(pages) when is_atom(pages) do
+    cond do
+      not Code.ensure_loaded?(pages) ->
+        refuse_pages!(pages, "names no module that exists")
+
+      function_exported?(pages, :init, 1) and function_exported?(pages, :call, 2) ->
+        pages
+
+      true ->
+        refuse_pages!(pages, "is not a plug: it does not export both `init/1` and `call/2`")
+    end
+  end
+
+  defp check_pages!(pages), do: refuse_pages!(pages, "is not a module name")
+
+  defp refuse_pages!(pages, problem) do
+    raise ArgumentError,
+          "config :ymer_node, YmerNode.Mcp, :pages names #{inspect(pages)}, which #{problem}"
   end
 end

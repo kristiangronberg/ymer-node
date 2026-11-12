@@ -38,8 +38,9 @@ files directory, `YmerNode.Script.Context.files_dir/1`; the cache directory,
 `YmerNode.Scripts.BrowserService.url/0`, the command a person types for the
 operator's verbs, `YmerNode.Scripts.CLI.command/0`, and the mount module a
 [*carrying application*](docs/glossary.md#carrying-application) serves tools of
-its own from, `YmerNode.Mcp.mount/0`. `config/dev.exs` sets all but the time
-zone, the extra CA certificates, the command and the mount module for this
+its own from, `YmerNode.Mcp.mount/0`. Its pages plug, where it names one, is
+read by `YmerNode.Mcp.pages/0`. `config/dev.exs` sets all but the time zone, the
+extra CA certificates, the command, the mount module and the pages plug for this
 checkout's own node. The node reads
 every value as given: each path must be absolute, and each directory must
 exist before the node starts.

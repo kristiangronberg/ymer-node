@@ -104,11 +104,12 @@ defmodule YmerNode.Application do
   # The bind address is not a preference — it is half the compensating control for
   # an unauthenticated /mcp, and which half depends on where the node runs.
   # `YmerNode.Mcp` owns that decision; this function only asks it. It asks the
-  # same of the mount module /mcp serves, and this call is the one read of it:
-  # a wrong one raises here and stops the application before anything listens.
+  # same of the mount module /mcp serves and of the pages plug every other path
+  # goes to, and these calls are the one read of each: a wrong one raises here
+  # and stops the application before anything listens.
   defp mcp_endpoint do
     {Bandit,
-     plug: {YmerNode.Mcp.Endpoint, YmerNode.Mcp.mount()},
+     plug: {YmerNode.Mcp.Endpoint, {YmerNode.Mcp.mount(), YmerNode.Mcp.pages()}},
      ip: YmerNode.Mcp.ip(),
      port: YmerNode.Mcp.port()}
   end

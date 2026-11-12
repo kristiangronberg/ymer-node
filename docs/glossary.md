@@ -235,6 +235,10 @@ _Avoid_: provenance, source, door (the informal word in prose)
 
 ## P
 
+### pages plug
+`YmerNode.Mcp.pages/0`
+_Avoid_: catch-all, fallback, endpoint (for it), app plug, web plug, page handler
+
 ### policy
 The options the node merges underneath a script's own when a battery is
 called through the context — facts of the machine and the run a script
