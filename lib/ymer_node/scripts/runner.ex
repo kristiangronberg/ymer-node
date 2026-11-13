@@ -484,6 +484,9 @@ defmodule YmerNode.Scripts.Runner do
     "#{where(script, action)}: #{Exception.message(term)}"
   end
 
+  # Text is the script's own words and reads as written; any other term is
+  # inspected, since that is the only way to show it.
+  defp detail(script, action, text) when is_binary(text), do: "#{where(script, action)}: #{text}"
   defp detail(script, action, term), do: "#{where(script, action)}: #{inspect(term)}"
 
   defp where(script, action), do: "#{script.name} #{action}"

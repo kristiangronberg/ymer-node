@@ -60,6 +60,7 @@ defmodule YmerNode.Scripts.RunnerTest do
     def actions do
       %{
         errors: %{description: "answers an error", properties: %{}, write: false},
+        says: %{description: "answers an error in its own words", properties: %{}, write: false},
         raises: %{description: "raises", properties: %{}, write: false},
         odd: %{description: "answers neither tuple", properties: %{}, write: false},
         opaque: %{description: "answers a pid", properties: %{}, write: false},
@@ -73,6 +74,7 @@ defmodule YmerNode.Scripts.RunnerTest do
 
     @impl true
     def run(:errors, _args, _context), do: {:error, :nothing_to_fetch}
+    def run(:says, _args, _context), do: {:error, "the search: answered 403\r\nForbidden"}
     def run(:raises, _args, _context), do: raise("boom")
     def run(:odd, _args, _context), do: :neither
     def run(:opaque, _args, _context), do: {:ok, %{"pid" => self()}}
@@ -510,7 +512,7 @@ defmodule YmerNode.Scripts.RunnerTest do
 
       assert {:error, {:unknown_action, message}} = Runner.run(script, "fetch", %{})
       assert message =~ "has no action fetch"
-      assert message =~ "errors, naps, odd, opaque, raises, slow"
+      assert message =~ "errors, naps, odd, opaque, raises, says, slow"
     end
 
     test "refuses arguments the action's schema rejects" do
@@ -530,6 +532,13 @@ defmodule YmerNode.Scripts.RunnerTest do
 
       assert {:error, {:script_error, message}} = Runner.run(script, "errors", %{})
       assert message =~ ":nothing_to_fetch"
+    end
+
+    test "answers an error given as text in the script's own words, not inspected" do
+      script = accepted(@faulty)
+
+      assert {:error, {:script_error, message}} = Runner.run(script, "says", %{})
+      assert message == "#{script.name} says: the search: answered 403\r\nForbidden"
     end
 
     test "answers a raise with the script's own line" do
