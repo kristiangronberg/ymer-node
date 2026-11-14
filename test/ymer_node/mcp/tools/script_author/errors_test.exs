@@ -27,7 +27,10 @@ defmodule YmerNode.Mcp.Tools.ScriptAuthor.ErrorsTest do
     :metadata_timeout,
     :invalid_description,
     :invalid_actions,
-    :invalid_declarations
+    :invalid_declarations,
+    :invalid_version,
+    :undeclared_library,
+    :contract_mismatch
   ]
 
   @acceptance_reasons [
@@ -40,7 +43,13 @@ defmodule YmerNode.Mcp.Tools.ScriptAuthor.ErrorsTest do
     :fallback_claimed,
     :throttle_conflict,
     :run_in_flight,
-    :commit_failed
+    :commit_failed,
+    :library_missing,
+    :library_broken,
+    :library_out_of_range,
+    :requirement_broken,
+    :library_in_use,
+    :version_unchanged
   ]
 
   test "a missing contract names the line to add" do
@@ -52,6 +61,21 @@ defmodule YmerNode.Mcp.Tools.ScriptAuthor.ErrorsTest do
     message = Errors.format({:module_outside_script, "Enum is defined outside Script."})
 
     assert message =~ "keeps a script from redefining"
+  end
+
+  test "a library that is not held steers at the list that shows what is" do
+    message = Errors.format({:library_missing, "sync declares the library crosskey (~> 1.0)"})
+    assert message =~ "`scripts list` shows the libraries"
+  end
+
+  test "a missing callback carries the fix the compiler wrote" do
+    message =
+      Errors.format(
+        {:missing_callbacks, "version/0 — add it, then store the code again with `update`"}
+      )
+
+    assert message ==
+             "The code does not implement version/0 — add it, then store the code again with `update`."
   end
 
   test "a metadata timeout says where the work belongs instead" do

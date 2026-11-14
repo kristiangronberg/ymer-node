@@ -1,9 +1,15 @@
 defmodule YmerNode.Scripts.Script do
   @moduledoc """
-  An Elixir module stored as a row in the node database — its code, the hash of
-  that code and the hash this node has accepted — compiled into the VM and
-  reachable through the `scripts` tool and by the node itself; `Script.<Name>`,
+  One row of the `scripts` table: a script or a library, each an Elixir module
+  stored with its code, the hash of that code and the hash this node has
+  accepted, and compiled into the VM — `Script.<Name>` or `Library.<Name>`,
   named after its module.
+
+  A **script** is the runnable kind, reachable through the `scripts` tool and by
+  the node itself. A **library** is the other kind: shared code scripts declare
+  and call, never run (`YmerNode.Library`). The two share the table's one name
+  space, so a name never means two rows. The table, the `scripts` tool and the
+  CLI's `scripts` noun keep their name as names of the collection.
 
   ## Acceptance is a comparison, not a flag
 
@@ -18,14 +24,17 @@ defmodule YmerNode.Scripts.Script do
   What accepting means, and which doors may do it, is stated once in `YmerNode`'s
   Scripts section.
 
-  ## The denormalised pair
+  ## The denormalised columns
 
-  `description` and `declarations` are copied out of the compiled module at
-  every write. They are not the truth — the code is — and a boot compile
-  rewrites them when the module has come to say something else. They exist so
-  that `list` and the references seam are one query each: classifying a
-  reference must not need a compiled module, and `YmerNode.References.Sources`
-  runs on every read.
+  `kind`, `version`, `description` and `declarations` are copied out of the
+  compiled module at every write, and nowhere else. They are not the truth —
+  the code is — and a boot compile does not rewrite them: it records what the
+  module answers as this boot's facts, which `describe` and a run read. So a row
+  stored before `version/0` was required holds no `version` until it is stored
+  again. They exist so that `list` and the references seam are one query each:
+  classifying a reference must not need a compiled module, and
+  `YmerNode.References.Sources` runs on every read. A library's `declarations`
+  are the empty map: it declares nothing.
 
   `declarations` is stored as JSON and comes back with **string** keys, which is
   the shape the seam wants; `t:YmerNode.Script.declarations/0` is the atom-keyed
@@ -38,7 +47,7 @@ defmodule YmerNode.Scripts.Script do
   earlier — the compiler derived the name, hashed the code and read the
   callbacks — so the changeset is a backstop against a bug in this codebase
   rather than against a caller. The checks that matter to a caller live
-  upstream, in the compiler's parse and in acceptance's six refusals
+  upstream, in the compiler's parse and in acceptance's refusals
   (`YmerNode.Scripts`).
   """
   use Ecto.Schema
@@ -48,8 +57,10 @@ defmodule YmerNode.Scripts.Script do
 
   @origins ~w(authored imported synced shipped)
 
-  @cast_fields ~w(name code code_hash accepted_hash accepted_at origin contract
-                  description declarations)a
+  @kinds ~w(script library)
+
+  @cast_fields ~w(name kind code code_hash accepted_hash accepted_at origin contract
+                  version description declarations)a
 
   @typedoc """
   Which door a script row arrived through — `authored` (an MCP write),
@@ -63,14 +74,23 @@ defmodule YmerNode.Scripts.Script do
   """
   @type origin :: String.t()
 
+  @typedoc """
+  Which kind of row this is — `script`, the runnable kind, or `library`, shared
+  code scripts declare and call — read from the code's top module and the
+  contract it uses. A plain string, as `t:origin/0` is.
+  """
+  @type kind :: String.t()
+
   schema "scripts" do
     field :name, :string
+    field :kind, :string, default: "script"
     field :code, :string
     field :code_hash, :string
     field :accepted_hash, :string
     field :accepted_at, :utc_datetime
     field :origin, :string
     field :contract, :integer
+    field :version, :string
     field :description, :string
     field :declarations, :map
 
@@ -82,14 +102,17 @@ defmodule YmerNode.Scripts.Script do
     |> cast(attrs, @cast_fields)
     |> validate_required([
       :name,
+      :kind,
       :code,
       :code_hash,
       :origin,
       :contract,
+      :version,
       :description,
       :declarations
     ])
     |> validate_inclusion(:origin, @origins)
+    |> validate_inclusion(:kind, @kinds)
     |> validate_format(:name, ~r/\A[a-z][a-z0-9_]*\z/)
     |> unique_constraint(:name)
   end
@@ -122,6 +145,15 @@ defmodule YmerNode.Scripts.Script do
   end
 
   @doc """
+  Narrows a query to the rows of the script kind, the one that runs — spelled
+  once, as `accepted/1` is, for every reader that wants scripts and not
+  libraries. `Script.scripts()` is the whole table so narrowed.
+  """
+  def scripts(query \\ __MODULE__) do
+    from script in query, where: script.kind == "script"
+  end
+
+  @doc """
   The sha256 of a script's code, lowercase hex — the value both hash columns
   hold.
 
@@ -137,4 +169,7 @@ defmodule YmerNode.Scripts.Script do
 
   @doc "The origins a row may carry, in the order they were introduced."
   def origins, do: @origins
+
+  @doc "The kinds a row may be."
+  def kinds, do: @kinds
 end

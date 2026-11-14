@@ -74,6 +74,9 @@ defmodule YmerNode.Schedules.SchedulerMinuteTest do
       def description, do: "the #{segment} script"
 
       @impl true
+      def version, do: "1.0.0"
+
+      @impl true
       def actions, do: %{ping: %{description: "answers", properties: %{}, write: false}}
 
       @impl true

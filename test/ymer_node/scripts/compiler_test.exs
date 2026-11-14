@@ -129,7 +129,8 @@ defmodule YmerNode.Scripts.CompilerTest do
                secrets: [],
                throttles: %{},
                cache: :text,
-               web_fallback: false
+               web_fallback: false,
+               libraries: %{}
              }
 
       assert compiled.warnings == []
@@ -154,6 +155,9 @@ defmodule YmerNode.Scripts.CompilerTest do
       body = """
         @impl true
         def description, do: "warns"
+
+        @impl true
+        def version, do: "1.0.0"
 
         @impl true
         def actions, do: %{noop: %{description: "n", properties: %{}, write: false}}
@@ -219,6 +223,14 @@ defmodule YmerNode.Scripts.CompilerTest do
       assert detail =~ "actions/0"
       assert detail =~ "run/3"
     end
+
+    test "a refusal after the tree loaded unloads it, so a refused tree is never callable" do
+      body = "  @impl true\n  def description, do: \"incomplete\"\n"
+      %{module: module} = refused = fixture(body: body)
+
+      assert {:error, {:missing_callbacks, _detail}} = compile_fixture(refused)
+      refute :code.is_loaded(module)
+    end
   end
 
   describe "compile/1 — the contract's values" do
@@ -226,6 +238,9 @@ defmodule YmerNode.Scripts.CompilerTest do
       """
         @impl true
         def description, do: "a fixture script"
+
+        @impl true
+        def version, do: "1.0.0"
 
         @impl true
         def actions do
@@ -255,6 +270,9 @@ defmodule YmerNode.Scripts.CompilerTest do
       body = """
         @impl true
         def description, do: "unmarked"
+
+        @impl true
+        def version, do: "1.0.0"
 
         @impl true
         def actions, do: %{noop: %{description: "n", properties: %{}}}
@@ -310,7 +328,8 @@ defmodule YmerNode.Scripts.CompilerTest do
                secrets: [],
                throttles: %{},
                cache: :text,
-               web_fallback: false
+               web_fallback: false,
+               libraries: %{}
              }
     end
 
@@ -400,5 +419,247 @@ defmodule YmerNode.Scripts.CompilerTest do
         assert detail =~ fault
       end
     end
+
+    test "keeps the libraries a script declares, and answers none for a script that declares none" do
+      declarations =
+        ~s|%{hosts: [], url_action: nil, secrets: [], libraries: %{"crosskey" => "~> 1.0"}}|
+
+      assert {:ok, compiled} = compile_fixture(fixture(body: with_declarations(declarations)))
+      assert compiled.declarations.libraries == %{"crosskey" => "~> 1.0"}
+
+      assert {:ok, plain} = compile_fixture(fixture())
+      assert plain.declarations.libraries == %{}
+    end
+
+    test "refuses libraries that break the grammar, naming the broken rule" do
+      cases = [
+        {"[]", ":libraries must be a map"},
+        {~s|%{"Crosskey" => "~> 1.0"}|, ~s|library name "Crosskey"|},
+        {~s|%{crosskey: "~> 1.0"}|, "library name :crosskey"},
+        {~s|%{"crosskey" => nil}|, "library crosskey: nil is not a requirement"},
+        {~s|%{"crosskey" => "1.0"}|, ~s|library crosskey: "1.0" is not a requirement|}
+      ]
+
+      for {libraries, fault} <- cases do
+        declarations = "%{hosts: [], url_action: nil, secrets: [], libraries: #{libraries}}"
+
+        assert {:error, {:invalid_declarations, detail}} =
+                 compile_fixture(fixture(body: with_declarations(declarations))),
+               "#{libraries} was not refused"
+
+        assert detail =~ fault
+      end
+    end
+
+    @tag doc: """
+         Guards against a declarations key being dropped instead of refused. A node
+         that dropped a key it does not read would run a script written for a newer
+         node without what that key asked for, so a failure here means an unknown
+         key is being dropped again.
+         """
+    test "refuses a key it does not read, naming it and the keys it does" do
+      body = with_declarations("%{hosts: [], url_action: nil, secrets: [], repos: []}")
+
+      assert {:error, {:invalid_declarations, detail}} = compile_fixture(fixture(body: body))
+      assert detail =~ ":repos is not a declaration this node reads"
+      assert detail =~ ":libraries"
+    end
+  end
+
+  describe "compile/1 — the version" do
+    test "answers the version a script reports" do
+      assert {:ok, compiled} = compile_fixture(fixture())
+      assert compiled.version == "1.0.0"
+      assert compiled.kind == :script
+      assert compiled.api == nil
+    end
+
+    test "refuses a version Version does not read" do
+      body = String.replace(fixture().code |> body_of(), ~s|"1.0.0"|, ~s|"1.0"|)
+
+      assert {:error, {:invalid_version, detail}} = compile_fixture(fixture(body: body))
+      assert detail =~ ~s|version/0 answers "1.0"|
+    end
+
+    @tag doc: """
+         A row written before the version callback existed fails exactly this way
+         at boot, and the detail is all an operator reading the boot log or
+         `describe` gets, so it has to carry the fix as well as the callback.
+         """
+    test "refuses a script without version/0, naming it and the fix" do
+      body =
+        String.replace(
+          body_of(fixture().code),
+          ~s|  @impl true\n  def version, do: "1.0.0"\n|,
+          ""
+        )
+
+      assert {:error, {:missing_callbacks, detail}} = compile_fixture(fixture(body: body))
+
+      assert detail =~
+               "version/0 — add it, then store the code with `create` if it is new, or again with `update`"
+    end
+  end
+
+  describe "parse/1 and compile/1 — a library" do
+    test "derives a library's name and kind from Library.<Name>" do
+      assert {:ok, %{name: "crosskey", module: Library.Crosskey, kind: :library}} =
+               Compiler.parse("defmodule Library.Crosskey do\nend\n")
+    end
+
+    test "answers a library's version, contract and documented API, and no actions" do
+      library = library_fixture()
+
+      assert {:ok, compiled} = compile_fixture(library)
+      assert compiled.kind == :library
+      assert compiled.name == library.name
+      assert compiled.contract == YmerNode.Library.contract()
+      assert compiled.version == "1.0.0"
+      assert compiled.description == "a fixture library"
+      assert compiled.actions == %{}
+      assert compiled.declarations == nil
+
+      assert compiled.api == [
+               %{
+                 name: "#{inspect(library.module)}.echo/1",
+                 signature: "echo(value)",
+                 doc: "Answers what it is handed."
+               }
+             ]
+    end
+
+    test "refuses a library naming another library, at the parse" do
+      body = """
+        def call, do: Library.Jira.get()
+      """
+
+      assert {:error, {:undeclared_library, detail}} =
+               Compiler.parse(library_fixture(body: body).code)
+
+      assert detail =~ "Library.Jira is another library"
+    end
+
+    test "refuses each contract under the other kind's namespace" do
+      script_body = "  use YmerNode.Script\n\n" <> body_of(fixture().code)
+      library = library_fixture(use: false, body: script_body)
+
+      assert {:error, {:contract_mismatch, detail}} = compile_fixture(library)
+      assert detail =~ "uses YmerNode.Script under `Library.`"
+
+      library_body = "  use YmerNode.Library\n\n" <> body_of(library_fixture().code)
+      script = fixture(use: false, body: library_body)
+
+      assert {:error, {:contract_mismatch, detail}} = compile_fixture(script)
+      assert detail =~ "uses YmerNode.Library under `Script.`"
+    end
+  end
+
+  describe "parse/1 and compile/1 — the libraries a script names" do
+    test "collects every Library. alias, the braces form included" do
+      code = """
+      defmodule Script.Names do
+        alias Library.{Crosskey, Jira}
+        require Library.Typesetting
+
+        def go, do: {Crosskey, Jira, Library.HTTPClient.get()}
+      end
+      """
+
+      assert {:ok, %{kind: :script, libraries: libraries}} = Compiler.parse(code)
+
+      assert libraries == %{
+               "crosskey" => "Library.Crosskey",
+               "jira" => "Library.Jira",
+               "typesetting" => "Library.Typesetting",
+               "http_client" => "Library.HTTPClient"
+             }
+    end
+
+    test "reads Elixir.Library.<Name> as the library it names, in a script and a library" do
+      code = """
+      defmodule Script.Names do
+        def go, do: Elixir.Library.Jira.get()
+      end
+      """
+
+      assert {:ok, %{libraries: %{"jira" => "Library.Jira"}}} = Compiler.parse(code)
+
+      body = """
+        def call, do: Elixir.Library.Jira.get()
+      """
+
+      assert {:error, {:undeclared_library, detail}} =
+               Compiler.parse(library_fixture(body: body).code)
+
+      assert detail =~ "Library.Jira is another library"
+    end
+
+    test "refuses Library written alone, in a script and a library" do
+      code = """
+      defmodule Script.Names do
+        alias Library, as: L
+
+        def go, do: L.Jira.get()
+      end
+      """
+
+      assert {:error, {:undeclared_library, detail}} = Compiler.parse(code)
+      assert detail =~ "alias each library in full"
+
+      body = """
+        alias Library, as: L
+
+        def call, do: L.Jira.get()
+      """
+
+      assert {:error, {:undeclared_library, _detail}} =
+               Compiler.parse(library_fixture(body: body).code)
+    end
+
+    test "fails the compile on a require of a library the node does not hold, declared or not" do
+      undeclared = with_declarations("%{hosts: [], url_action: nil, secrets: []}")
+
+      declared =
+        with_declarations(
+          ~s|%{hosts: [], url_action: nil, secrets: [], libraries: %{"gone" => "~> 1.0"}}|
+        )
+
+      for body <- [undeclared, declared] do
+        assert {:error, {:compile_error, _detail}} =
+                 compile_fixture(fixture(body: "  require Library.Gone\n\n" <> body))
+      end
+    end
+
+    test "refuses a script calling a library its declarations do not name" do
+      library = library_fixture()
+      assert {:ok, _library} = compile_fixture(library)
+
+      body =
+        with_declarations("%{hosts: [], url_action: nil, secrets: []}")
+        |> String.replace(
+          "def run(_action, _args, _context), do: {:ok, %{}}",
+          "def run(_action, _args, _context), do: {:ok, #{inspect(library.module)}.echo(%{})}"
+        )
+
+      assert {:error, {:undeclared_library, detail}} = compile_fixture(fixture(body: body))
+      assert detail =~ "the code names #{inspect(library.module)}"
+      assert detail =~ ~s|add "#{library.name}" to :libraries|
+
+      declared =
+        String.replace(
+          body,
+          "secrets: []}",
+          ~s|secrets: [], libraries: %{"#{library.name}" => "~> 1.0"}}|
+        )
+
+      assert {:ok, compiled} = compile_fixture(fixture(body: declared))
+      assert compiled.declarations.libraries == %{library.name => "~> 1.0"}
+      assert compiled.warnings == []
+    end
+  end
+
+  # The callbacks between a fixture's `defmodule` line and its final `end`.
+  defp body_of(code) do
+    code |> String.split("\n", parts: 2) |> List.last() |> String.replace_suffix("end\n", "")
   end
 end

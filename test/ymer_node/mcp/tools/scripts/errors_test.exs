@@ -17,6 +17,13 @@ defmodule YmerNode.Mcp.Tools.Scripts.ErrorsTest do
     assert message =~ "from the machine itself with `scripts accept`."
   end
 
+  test "a library is refused as a library, with its own steer to describe" do
+    message =
+      Errors.format({:not_runnable, "crosskey is a library: `describe` shows its functions"})
+
+    assert message == "crosskey is a library: `describe` shows its functions."
+  end
+
   test "a missing script steers at list, an unknown action at describe" do
     assert Errors.format({:not_found, "no script named hex"}) =~ "`list`"
     assert Errors.format({:unknown_action, "hex has no action fetch"}) =~ "`describe`"
@@ -76,5 +83,15 @@ defmodule YmerNode.Mcp.Tools.Scripts.ErrorsTest do
              "Failed to run a script: :surprise"
 
     assert Errors.format(:surprise) =~ "Operation failed: :surprise"
+  end
+
+  test "a run refused for a library keeps the library's fix and names describe" do
+    for reason <- [:library_missing, :library_broken, :library_out_of_range] do
+      message = Errors.format({reason, "sync runs again once crosskey is held"})
+
+      assert message =~ "sync runs again once crosskey is held"
+      assert message =~ "`describe`"
+      refute message =~ "script_author update"
+    end
   end
 end

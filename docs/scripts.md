@@ -41,7 +41,11 @@ by the first rung that fits.
 2. **A library.** Shared Elixir code authored like a script and declared
    by the scripts that use it: the home for anything expressible in
    Elixir at the size of a module or a few — a converter, a client, a
-   protocol.
+   protocol. It is a `Library.<Name>` module that uses `YmerNode.Library`,
+   and each script names it in its declarations with a requirement on its
+   version. A call into it reaches the library's current version at once;
+   a macro or struct a script takes from it is fixed when that script
+   compiles, until the script is stored again.
 3. **A service over HTTP.** The node is an integration host, so a
    capability that exists as a service is reached the way any system is:
    a PDF renderer, a browser, an LLM or embedding API. No battery, and

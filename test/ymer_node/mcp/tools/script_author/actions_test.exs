@@ -22,7 +22,7 @@ defmodule YmerNode.Mcp.Tools.ScriptAuthor.ActionsTest do
 
       assert {:ok, checked, hint_context} = Actions.run(:check, %{"code" => code(segment)})
       assert checked.name == Macro.underscore(segment)
-      assert checked.contract == 1
+      assert checked.contract == 2
       assert %{"ping" => %{write: false}} = checked.actions
       assert checked.existing == false
       assert hint_context == %{}
@@ -65,7 +65,9 @@ defmodule YmerNode.Mcp.Tools.ScriptAuthor.ActionsTest do
       purge_on_exit(segment)
       assert {:ok, before, _hint} = Actions.run(:create, %{"code" => code(segment)})
 
-      reworded = String.replace(code(segment), "the #{segment} script", "reworded")
+      reworded =
+        String.replace(code(segment), "the #{segment} script", "reworded")
+        |> String.replace(~s|"1.0.0"|, ~s|"1.1.0"|)
 
       assert {:ok, detail, _hint} =
                Actions.run(:update, %{"script" => before.name, "code" => reworded})
@@ -171,6 +173,9 @@ defmodule YmerNode.Mcp.Tools.ScriptAuthor.ActionsTest do
 
       @impl true
       def description, do: "the #{segment} script"
+
+      @impl true
+      def version, do: "1.0.0"
 
       @impl true
       def actions do

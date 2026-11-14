@@ -46,6 +46,9 @@ defmodule Script.Hex do
   def description, do: "Packages on hex.pm: metadata, versions, links and downloads"
 
   @impl true
+  def version, do: "1.0.0"
+
+  @impl true
   def actions do
     %{
       package: %{

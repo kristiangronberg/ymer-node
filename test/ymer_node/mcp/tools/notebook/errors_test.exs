@@ -156,6 +156,20 @@ defmodule YmerNode.Mcp.Tools.Notebook.ErrorsTest do
     end
   end
 
+  describe "message/2 for parameters" do
+    test "a value that does not bind says the statement did not run, and names its position" do
+      message = Errors.format({:invalid_param, "parameter 2 is {:a, 1}, which does not bind"})
+
+      assert message == "The statement did not run: parameter 2 is {:a, 1}, which does not bind."
+    end
+
+    test "params that are not an array name what they must be, without the string advice" do
+      message = Errors.format({:wrong_type, %{key: "params", expected: "an array", got: 42}})
+
+      assert message == "params must be an array, one value per placeholder; got 42."
+    end
+  end
+
   defp refusal(got, ctx \\ %{}) do
     Errors.format({:wrong_type, %{key: "sql", expected: "a string", got: got}}, ctx)
   end

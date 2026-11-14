@@ -14,8 +14,9 @@ defmodule YmerNode.Mcp.Tools.Scripts.Schemas do
   @script %{
     "type" => "string",
     "description" =>
-      "The script's name — derived from its module, so `Script.Hex` is \"hex\" " <>
-        "and `Script.ReqTest` is \"req_test\". `list` names them all.",
+      ~s|The script's or library's name — derived from its module, so `Script.Hex` | <>
+        ~s|is "hex", `Script.ReqTest` is "req_test" and `Library.Crosskey` is | <>
+        ~s|"crosskey". `list` names them all.|,
     "minLength" => 1,
     "examples" => ["hex", "req_test"]
   }
@@ -60,10 +61,12 @@ defmodule YmerNode.Mcp.Tools.Scripts.Schemas do
       required: [],
       defaults: %{},
       notes:
-        "Slim: name, description, origin, action names, and whether the script " <>
-          "is accepted and compiled. A script that is not BOTH cannot run, and " <>
-          "carries the reason why — it is listed rather than hidden, because the " <>
-          "fix is to look at it. Call `describe` for an action's arguments.",
+        "Slim: name, kind, version, description, origin, action names, and " <>
+          "whether the row is accepted and compiled. Scripts and libraries are one " <>
+          "list; a library has no actions and never runs. A script that is not " <>
+          "BOTH accepted and compiled cannot run, and carries the reason why — it " <>
+          "is listed rather than hidden, because the fix is to look at it. Call " <>
+          "`describe` for an action's arguments.",
       related: ["describe", "run"]
     },
     describe: %{
@@ -80,8 +83,12 @@ defmodule YmerNode.Mcp.Tools.Scripts.Schemas do
           "names with their parameters, how the cache stores what its URL " <>
           "action answers (`cache`), and whether it is the web fallback " <>
           "(`web_fallback`); the secrets' VALUES " <>
-          "never appear here or anywhere else. With `code: true` the answer " <>
-          "carries the code as well, and a hint says how to share it.",
+          "never appear here or anywhere else. A script also lists the " <>
+          "`libraries` it declares, each with its requirement and the version " <>
+          "this node holds. A library answers its `api` — each documented " <>
+          "function with its signature and doc, the calls a script makes — and " <>
+          "its `dependents`, the scripts declaring it. With `code: true` the " <>
+          "answer carries the code as well, and a hint says how to share it.",
       related: ["run", "list"]
     },
     guide: %{
@@ -90,10 +97,11 @@ defmodule YmerNode.Mcp.Tools.Scripts.Schemas do
       required: [],
       defaults: %{},
       notes:
-        "The call to make before writing a script, read whole once: the docs of " <>
-          "`YmerNode.Script` — the four callbacks, the action shape, the loop, " <>
-          "what a script may call, secrets, sharing — and of " <>
-          "`YmerNode.Script.Context`, the functions a script is handed. Then " <>
+        "The call to make before writing a script or a library, read whole once: " <>
+          "the docs of `YmerNode.Script` — the callbacks, the action shape, the " <>
+          "loop, what a script may call, secrets, sharing — of " <>
+          "`YmerNode.Script.Context`, the functions a script is handed, and of " <>
+          "`YmerNode.Library`, the shared code scripts declare and call. Then " <>
           "`script_author check` the code before `create`. It is the same text " <>
           "the published docs carry, rendered here from this build's own docs and " <>
           "followed by the applications this node carries; a build that stripped " <>

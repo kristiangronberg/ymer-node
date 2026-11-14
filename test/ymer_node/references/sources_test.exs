@@ -181,6 +181,14 @@ defmodule YmerNode.References.SourcesTest do
       assert Sources.declarations() == []
     end
 
+    test "a library row declares nothing, whatever its declarations column holds" do
+      claim = %{"hosts" => ["lib.example.fi"], "url_action" => "issue", "secrets" => []}
+      library = insert_script!("shared", claim)
+      library |> Ecto.Changeset.change(kind: "library") |> Repo.update!()
+
+      assert Sources.declarations() == []
+    end
+
     test "answers in name order, so two calls agree" do
       claim = fn host -> %{"hosts" => [host], "url_action" => "issue", "secrets" => []} end
       insert_script!("zebra", claim.("z.example.fi"))
@@ -262,6 +270,7 @@ defmodule YmerNode.References.SourcesTest do
       accepted_at: DateTime.utc_now() |> DateTime.truncate(:second),
       origin: "authored",
       contract: 1,
+      version: "1.0.0",
       description: name,
       declarations: declarations
     })

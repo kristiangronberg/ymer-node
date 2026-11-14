@@ -211,6 +211,9 @@ defmodule YmerNode.Mcp.Tools.References.CacheActionsTest do
       def description, do: "answers tool.example.test pages"
 
       @impl true
+      def version, do: "1.0.0"
+
+      @impl true
       def actions do
         %{
           fetch: %{
@@ -253,6 +256,9 @@ defmodule YmerNode.Mcp.Tools.References.CacheActionsTest do
 
       @impl true
       def description, do: "answers legacy.example.test the way it always has"
+
+      @impl true
+      def version, do: "1.0.0"
 
       @impl true
       def actions do

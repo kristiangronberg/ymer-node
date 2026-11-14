@@ -133,8 +133,15 @@ defmodule YmerNode.Mcp.Tools.Notebook.Errors do
   # caller's own and leaks nothing — and it is bounded by `show/1`, because no
   # value the caller sent may turn the answer into a dump. Placed above the two
   # catch-alls below, which match any reason and would otherwise swallow this one.
+  def message({:wrong_type, %{key: "params", got: got}}, _ctx),
+    do: "params must be an array, one value per placeholder; got #{show(got)}."
+
   def message({:wrong_type, %{key: key, expected: expected, got: got}}, _ctx),
     do: "#{key} must be #{expected}; got #{show(got)}. Send #{key} as a JSON string."
+
+  # Refused by `YmerNode.Notebook` before the statement ran, so nothing landed.
+  def message({:invalid_param, detail}, _ctx),
+    do: "The statement did not run: #{detail}."
 
   def message(reason, %{action_verb: verb}), do: "Failed to #{verb}: #{inspect(reason)}"
   def message(reason, _ctx), do: "Operation failed: #{inspect(reason)}"

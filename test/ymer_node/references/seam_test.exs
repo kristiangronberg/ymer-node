@@ -232,6 +232,7 @@ defmodule YmerNode.References.SeamTest do
       accepted_at: DateTime.utc_now() |> DateTime.truncate(:second),
       origin: "authored",
       contract: 1,
+      version: "1.0.0",
       description: name,
       declarations: declarations
     })

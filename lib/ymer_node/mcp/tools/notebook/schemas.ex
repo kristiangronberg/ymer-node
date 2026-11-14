@@ -9,6 +9,15 @@ defmodule YmerNode.Mcp.Tools.Notebook.Schemas do
   @table %{"type" => "string", "description" => "Table name to describe."}
   @backup_id %{"type" => "string", "description" => "A backup id, exactly as returned by list."}
 
+  @params %{
+    "type" => "array",
+    "items" => %{},
+    "description" =>
+      "Values bound to the statement's ? and ?NNN placeholders, in order: numbers, " <>
+        "strings and null as themselves, true and false as 1 and 0, arrays and objects " <>
+        "as their JSON text. Bind a value here rather than quoting it into sql."
+  }
+
   @vec_notes """
   sqlite-vec is loaded. Vector storage uses `CREATE VIRTUAL TABLE name USING \
   vec0(embedding float[N])`. ALWAYS keep a companion regular table for document \
@@ -35,9 +44,9 @@ defmodule YmerNode.Mcp.Tools.Notebook.Schemas do
     execute: %{
       description:
         "Run a DDL/DML statement (CREATE/ALTER/DROP/INSERT/UPDATE/DELETE). Returns affected_rows.",
-      properties: %{"sql" => @sql},
+      properties: %{"sql" => @sql, "params" => @params},
       required: ["sql"],
-      defaults: %{},
+      defaults: %{"params" => []},
       notes:
         "The write/schema surface. ATTACH/DETACH and VACUUM INTO are rejected. " <>
           @vec_notes,
@@ -51,6 +60,12 @@ defmodule YmerNode.Mcp.Tools.Notebook.Schemas do
         %{
           data: %{
             sql: "CREATE VIRTUAL TABLE vec_confluence_pages USING vec0(embedding float[768])"
+          }
+        },
+        %{
+          data: %{
+            sql: "INSERT INTO confluence_pages (page_key, title) VALUES (?1, ?2)",
+            params: ["ENG-12", "Release notes: it's out"]
           }
         },
         %{
@@ -71,9 +86,9 @@ defmodule YmerNode.Mcp.Tools.Notebook.Schemas do
     query: %{
       description:
         "Run a read-only SELECT/WITH/EXPLAIN. Returns columns + rows. Use LIMIT/OFFSET for paging.",
-      properties: %{"sql" => @sql},
+      properties: %{"sql" => @sql, "params" => @params},
       required: ["sql"],
-      defaults: %{},
+      defaults: %{"params" => []},
       notes:
         "Read-only: the statement runs in a transaction that is always rolled back, " <>
           "so it cannot persist writes. EXPLAIN/EXPLAIN QUERY PLAN are allowed; PRAGMA " <>

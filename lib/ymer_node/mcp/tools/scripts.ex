@@ -45,7 +45,10 @@ defmodule YmerNode.Mcp.Tools.Scripts do
         "Read describe " <>
         "before you run: a run can reach the network and change things outside " <>
         "this machine, and it is killed rather than waited on past its deadline. " <>
-        "Only a script accepted at exactly the code it holds will run."
+        "Only a script accepted at exactly the code it holds will run. A library " <>
+        "is shared code scripts declare and call: list shows it beside the " <>
+        "scripts, describe gives its functions and the scripts that declare it, " <>
+        "and it is never run."
 
   @impl true
   def actions, do: Schemas.all()

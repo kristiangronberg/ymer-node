@@ -62,6 +62,9 @@ defmodule Script.Webpage do
   def description, do: "Any web page, read as markdown — the web fallback for unclaimed hosts"
 
   @impl true
+  def version, do: "1.0.0"
+
+  @impl true
   def actions do
     %{
       fetch: %{

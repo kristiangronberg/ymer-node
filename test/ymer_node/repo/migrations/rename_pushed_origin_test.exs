@@ -83,6 +83,7 @@ defmodule YmerNode.Repo.Migrations.RenamePushedOriginTest do
           accepted_at: DateTime.utc_now() |> DateTime.truncate(:second),
           origin: "authored",
           contract: YmerNode.Script.contract(),
+          version: "1.0.0",
           description: name,
           declarations: %{"hosts" => [], "url_action" => nil, "secrets" => []}
         })

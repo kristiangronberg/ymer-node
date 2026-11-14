@@ -22,12 +22,15 @@ defmodule YmerNode.ScriptContextTest do
   `files_dir`, and the absent-key case deletes that one key rather than the
   list, for the same reason.
 
-  The four notebook forwards (`execute/2`, `query/2`, `tables/1`,
-  `table_schema/2`) are not exercised here: each is a single expression naming a
-  public `YmerNode.Notebook` function, so a wrong name is an undefined-function
-  warning and `mix precommit` compiles with `--warnings-as-errors`. What they
-  forward *to* is `YmerNode.NotebookTest`'s subject, and duplicating it here
-  would need the notebook's sandbox and cost this module its async.
+  The four notebook forwards (`execute/3`, `query/3`, `tables/1`,
+  `table_schema/2`) are not exercised against the notebook here: each is a single
+  expression naming a public `YmerNode.Notebook` function, so a wrong name is an
+  undefined-function warning and `mix precommit` compiles with
+  `--warnings-as-errors`. What they forward *to* is `YmerNode.NotebookTest`'s
+  subject, and duplicating it here would need the notebook's sandbox and cost this
+  module its async. The one case below reaches no store: a parameter that does not
+  bind is refused before the notebook is asked, which is what shows the
+  parameters are forwarded at all.
 
   The three render forwards are exercised, for the opposite reason: what the
   cases prove is the node's own policy underneath a script's options — the
@@ -49,6 +52,9 @@ defmodule YmerNode.ScriptContextTest do
 
     @impl true
     def description, do: "a fixture"
+
+    @impl true
+    def version, do: "1.0.0"
 
     @impl true
     def actions, do: %{noop: %{description: "does nothing", properties: %{}, write: false}}
@@ -88,9 +94,10 @@ defmodule YmerNode.ScriptContextTest do
       assert YmerNode.Script.contract() > 0
     end
 
-    test "the required callbacks are the four the compiler cannot enforce" do
+    test "the required callbacks are the ones the compiler cannot enforce" do
       assert YmerNode.Script.callbacks() == [
                {:description, 0},
+               {:version, 0},
                {:actions, 0},
                {:declarations, 0},
                {:run, 3}
@@ -99,6 +106,16 @@ defmodule YmerNode.ScriptContextTest do
       for {name, arity} <- YmerNode.Script.callbacks() do
         assert function_exported?(UsesContract, name, arity)
       end
+    end
+  end
+
+  describe "execute/3 and query/3" do
+    test "forward the parameters, so one that does not bind is refused before the notebook" do
+      assert {:error, {:invalid_param, detail}} = Context.query(context(), "SELECT ?", [self()])
+      assert detail =~ "parameter 1"
+
+      assert {:error, {:invalid_param, _detail}} =
+               Context.execute(context(), "INSERT INTO t VALUES (?)", [{:a, 1}])
     end
   end
 

@@ -26,8 +26,8 @@ defmodule YmerNode.Mcp.Tools.ScriptFormat do
   alias YmerNode.Mcp.Tools.Helpers
 
   @doc """
-  One script as `list` and the write verbs answer it: what it is, whether it can
-  run, and why not where it cannot.
+  One script or library as `list` and the write verbs answer it: what it is,
+  its kind and version, whether it can run, and why not where it cannot.
 
   `accepted?` becomes `accepted` and `loaded?` becomes `loaded`: a trailing
   question mark is Elixir's convention for a predicate and means nothing on the
@@ -36,6 +36,8 @@ defmodule YmerNode.Mcp.Tools.ScriptFormat do
   def summary(entry) when is_map(entry) do
     %{
       name: entry.name,
+      kind: Map.get(entry, :kind),
+      version: Map.get(entry, :version),
       description: entry.description,
       origin: entry.origin,
       accepted: entry.accepted?,
@@ -47,9 +49,11 @@ defmodule YmerNode.Mcp.Tools.ScriptFormat do
   end
 
   @doc """
-  One script in full, as `describe` answers it — the summary plus the contract,
-  the acceptance time, the declarations, each action's whole schema, and the code
-  where it was asked for.
+  One script or library in full, as `describe` answers it — the summary plus the
+  contract, the acceptance time, the declarations, each action's whole schema,
+  and the code where it was asked for. A script adds the libraries it declares,
+  each with the version this node holds; a library adds its API and the scripts
+  that declare it.
   """
   def detail(entry) when is_map(entry) do
     entry
@@ -61,7 +65,10 @@ defmodule YmerNode.Mcp.Tools.ScriptFormat do
       declarations: entry.declarations,
       actions: actions(entry.actions),
       warnings: entry.warnings,
-      code: entry.code
+      code: entry.code,
+      libraries: Map.get(entry, :libraries),
+      api: Map.get(entry, :api),
+      dependents: Map.get(entry, :dependents)
     })
     |> Helpers.compact()
   end
@@ -83,10 +90,13 @@ defmodule YmerNode.Mcp.Tools.ScriptFormat do
   def checked(compiled) when is_map(compiled) do
     %{
       name: compiled.name,
+      kind: kind(Map.get(compiled, :kind)),
+      version: Map.get(compiled, :version),
       description: compiled.description,
       contract: compiled.contract,
       declarations: compiled.declarations,
       actions: actions(compiled.actions),
+      api: Map.get(compiled, :api),
       warnings: compiled.warnings,
       existing: compiled.existing
     }
@@ -117,6 +127,9 @@ defmodule YmerNode.Mcp.Tools.ScriptFormat do
     }
     |> Helpers.compact()
   end
+
+  defp kind(nil), do: nil
+  defp kind(kind) when is_atom(kind), do: Atom.to_string(kind)
 
   defp error(nil), do: nil
   defp error({reason, detail}), do: "#{reason}: #{detail}"

@@ -34,6 +34,9 @@ defmodule YmerNode.Scripts.RunnerTest do
     def description, do: "greets"
 
     @impl true
+    def version, do: "1.0.0"
+
+    @impl true
     def actions do
       %{
         greet: %{
@@ -55,6 +58,9 @@ defmodule YmerNode.Scripts.RunnerTest do
   @faulty """
     @impl true
     def description, do: "fails in every way there is"
+
+    @impl true
+    def version, do: "1.0.0"
 
     @impl true
     def actions do
@@ -112,6 +118,9 @@ defmodule YmerNode.Scripts.RunnerTest do
           def description, do: "reads its own context"
 
           @impl true
+          def version, do: "1.0.0"
+
+          @impl true
           def actions do
             %{
               look: %{
@@ -157,6 +166,9 @@ defmodule YmerNode.Scripts.RunnerTest do
           def description, do: "reports in a named zone"
 
           @impl true
+          def version, do: "1.0.0"
+
+          @impl true
           def actions do
             %{shift: %{description: "shifts a fixed instant", properties: %{}, write: false}}
           end
@@ -187,6 +199,9 @@ defmodule YmerNode.Scripts.RunnerTest do
         accepted("""
           @impl true
           def description, do: "round-trips CSV"
+
+          @impl true
+          def version, do: "1.0.0"
 
           @impl true
           def actions do
@@ -226,6 +241,9 @@ defmodule YmerNode.Scripts.RunnerTest do
           def description, do: "round-trips a workbook in memory"
 
           @impl true
+          def version, do: "1.0.0"
+
+          @impl true
           def actions do
             %{xlsx: %{description: "writes, then reads", properties: %{}, write: false}}
           end
@@ -257,6 +275,9 @@ defmodule YmerNode.Scripts.RunnerTest do
 
           @impl true
           def description, do: "reads XML"
+
+          @impl true
+          def version, do: "1.0.0"
 
           @impl true
           def actions do
@@ -315,6 +336,9 @@ defmodule YmerNode.Scripts.RunnerTest do
           def description, do: "builds a SOAP envelope"
 
           @impl true
+          def version, do: "1.0.0"
+
+          @impl true
           def actions do
             %{
               envelope: %{
@@ -364,6 +388,9 @@ defmodule YmerNode.Scripts.RunnerTest do
 
           @impl true
           def description, do: "upcases a file into a sibling"
+
+          @impl true
+          def version, do: "1.0.0"
 
           @impl true
           def actions do
@@ -425,6 +452,9 @@ defmodule YmerNode.Scripts.RunnerTest do
 
           @impl true
           def description, do: "renders a status report"
+
+          @impl true
+          def version, do: "1.0.0"
 
           @impl true
           def actions do
@@ -578,6 +608,9 @@ defmodule YmerNode.Scripts.RunnerTest do
           def description, do: "reads a secret nobody set"
 
           @impl true
+          def version, do: "1.0.0"
+
+          @impl true
           def actions do
             %{read: %{description: "answers a missing secret", properties: %{}, write: false}}
           end
@@ -669,6 +702,9 @@ defmodule YmerNode.Scripts.RunnerTest do
         accepted("""
           @impl true
           def description, do: "sleeps for ages"
+
+          @impl true
+          def version, do: "1.0.0"
 
           @impl true
           def actions do

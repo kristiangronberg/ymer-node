@@ -214,9 +214,16 @@ defmodule YmerNode.Scripts.CLI do
   end
 
   defp list_line(script) do
-    actions = script.actions |> Enum.sort() |> Enum.map_join(", ", &Atom.to_string/1)
-    "#{state(script)} #{script.name}  #{script.description}\n    #{actions}"
+    "#{state(script)} #{script.name} #{script.version}  #{script.description}\n    " <>
+      list_actions(script)
   end
+
+  # A library's second line says what it is instead, because it has no actions
+  # to list and is never run.
+  defp list_actions(%{kind: "library"}), do: "library — scripts call it"
+
+  defp list_actions(script),
+    do: script.actions |> Enum.sort() |> Enum.map_join(", ", &Atom.to_string/1)
 
   # A single glyph per row, because a listing is scanned rather than read. Only
   # the third needs explaining, and `describe` is where its diagnostics are.
@@ -261,16 +268,34 @@ defmodule YmerNode.Scripts.CLI do
 
   defp render_describe(script) do
     [
-      "#{script.name} — #{script.description}",
-      "  origin: #{script.origin}   contract: #{script.contract}",
+      "#{script.name} #{script.version} — #{script.description}",
+      "  #{script.kind}   origin: #{script.origin}   contract: #{script.contract}",
       "  accepted: #{script.accepted?}   compiled: #{script.loaded?}",
       "  declarations: #{inspect(script.declarations)}",
+      render_related(script),
       render_actions(script.actions),
       render_trouble(script),
       render_code(script)
     ]
     |> Enum.reject(&(&1 == ""))
     |> Enum.join("\n")
+  end
+
+  # Either side of the graph: what a script declares, with what this node holds,
+  # and a library's functions and the scripts that declare it.
+  defp render_related(%{kind: "library"} = library) do
+    api = Enum.map(library.api, &"    #{&1.signature} — #{&1.doc |> String.split("\n") |> hd()}")
+    dependents = Enum.map(library.dependents, &"    #{&1.name} #{&1.requirement}")
+    Enum.join(["  api:" | api] ++ ["  dependents:" | dependents], "\n")
+  end
+
+  defp render_related(%{libraries: []}), do: ""
+
+  defp render_related(%{libraries: libraries}) do
+    "  libraries:\n" <>
+      Enum.map_join(libraries, "\n", fn library ->
+        "    #{library.name} #{library.requirement} — holds #{library.version || "none"}"
+      end)
   end
 
   defp render_actions(actions) when map_size(actions) == 0, do: ""

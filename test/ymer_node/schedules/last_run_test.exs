@@ -11,7 +11,11 @@ defmodule YmerNode.Schedules.LastRunTest do
         "refused" => [
           :not_found,
           :not_accepted,
+          :not_runnable,
           :not_loaded,
+          :library_missing,
+          :library_broken,
+          :library_out_of_range,
           :unknown_action,
           :invalid_schema,
           :invalid_args,

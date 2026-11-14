@@ -4,7 +4,7 @@ defmodule YmerNode.MixProject do
   def project do
     [
       app: :ymer_node,
-      version: "0.7.6",
+      version: "0.8.0",
       elixir: "~> 1.19",
       elixirc_paths: elixirc_paths(Mix.env()),
       aliases: aliases(),
@@ -60,7 +60,7 @@ defmodule YmerNode.MixProject do
       source_url: @source_url,
       extras: [{"README.md", title: "README"}, "docs/glossary.md", "docs/scripts.md"],
       groups_for_modules: [
-        Scripts: ~r/^YmerNode\.Scripts?(\.|$)/,
+        Scripts: ~r/^YmerNode\.(Scripts?|Library)(\.|$)/,
         Development: ~r/^YmerNodeDev(\.|$)/
       ]
     ]

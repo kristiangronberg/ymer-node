@@ -105,11 +105,16 @@ defmodule YmerNode.Script.Context do
 
   ## The notebook
 
-  The four functions mirror `YmerNode.Notebook`'s own surface — `execute/1`,
-  `query/1`, `tables/0`, `table_schema/1` — and cross no boundary the LLM has
+  The four functions mirror `YmerNode.Notebook`'s own surface — `execute/2`,
+  `query/2`, `tables/0`, `table_schema/1` — and cross no boundary the LLM has
   not already crossed: it writes the notebook directly through the `notebook`
   tool. There is nothing here to declare, which is why `t:YmerNode.Script.declarations/0`
   has no notebook key.
+
+  A value reaches a statement as a parameter, never quoted into the SQL by hand:
+  `execute(context, sql, params)` and `query(context, sql, params)` bind each
+  value to its `?` in order, a list or a map as JSON text that `json_each/1`
+  reads — the rules are `YmerNode.Notebook.execute/2`'s.
 
   ## Playwright
 
@@ -427,11 +432,19 @@ defmodule YmerNode.Script.Context do
     end
   end
 
-  @doc "Runs one DDL/DML statement against the notebook — `YmerNode.Notebook.execute/1`."
-  def execute(%__MODULE__{}, sql) when is_binary(sql), do: Notebook.execute(sql)
+  @doc """
+  Runs one DDL/DML statement against the notebook, `params` bound to its
+  placeholders — `YmerNode.Notebook.execute/2`.
+  """
+  def execute(%__MODULE__{}, sql, params \\ []) when is_binary(sql) and is_list(params),
+    do: Notebook.execute(sql, params)
 
-  @doc "Runs one read-only statement against the notebook — `YmerNode.Notebook.query/1`."
-  def query(%__MODULE__{}, sql) when is_binary(sql), do: Notebook.query(sql)
+  @doc """
+  Runs one read-only statement against the notebook, `params` bound to its
+  placeholders — `YmerNode.Notebook.query/2`.
+  """
+  def query(%__MODULE__{}, sql, params \\ []) when is_binary(sql) and is_list(params),
+    do: Notebook.query(sql, params)
 
   @doc "Lists the notebook's user tables — `YmerNode.Notebook.tables/0`."
   def tables(%__MODULE__{}), do: Notebook.tables()

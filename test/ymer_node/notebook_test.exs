@@ -206,6 +206,72 @@ defmodule YmerNode.NotebookTest do
     end
   end
 
+  describe "execute/2 and query/2 with params" do
+    setup do
+      {:ok, _} = Notebook.execute("CREATE TABLE t (id INTEGER PRIMARY KEY, v TEXT, n REAL)")
+      :ok
+    end
+
+    test "binds positional values instead of quoting them" do
+      assert {:ok, %{affected_rows: 1}} =
+               Notebook.execute("INSERT INTO t (v, n) VALUES (?1, ?2)", ["it's", 1.5])
+
+      assert {:ok, %{rows: [["it's", 1.5]]}} =
+               Notebook.query("SELECT v, n FROM t WHERE v = ?", ["it's"])
+    end
+
+    test "binds nil, booleans as 1 and 0, and lists and maps as JSON text" do
+      assert {:ok, %{rows: [[nil, 1, 0]]}} = Notebook.query("SELECT ?, ?, ?", [nil, true, false])
+
+      assert {:ok, %{rows: [["a"], ["b"]]}} =
+               Notebook.query("SELECT value FROM json_each(?) ORDER BY value", [["a", "b"]])
+
+      assert {:ok, %{rows: [[1]]}} =
+               Notebook.query("SELECT json_extract(?, '$.x')", [%{"x" => 1}])
+    end
+
+    test "refuses a value that does not bind, naming its position, and runs nothing" do
+      assert {:error, {:invalid_param, detail}} =
+               Notebook.execute("INSERT INTO t (v) VALUES (?1), (?2)", ["a", {:b, 1}])
+
+      assert detail =~ "parameter 2"
+      assert {:ok, %{rows: [[0]]}} = Notebook.query("SELECT count(*) FROM t")
+
+      assert {:error, {:invalid_param, _detail}} = Notebook.query("SELECT ?", [self()])
+    end
+
+    test "binds an integer only inside SQLite's signed 64-bit range, naming the position of one outside" do
+      max = 9_223_372_036_854_775_807
+      min = -9_223_372_036_854_775_808
+
+      assert {:ok, %{rows: [[^max, ^min]]}} = Notebook.query("SELECT ?, ?", [max, min])
+
+      assert {:error, {:invalid_param, detail}} = Notebook.query("SELECT ?, ?", [1, max + 1])
+      assert detail =~ "parameter 2"
+      assert detail =~ "64-bit"
+
+      huge = Integer.pow(10, 100_000)
+      assert {:error, {:invalid_param, detail}} = Notebook.query("SELECT ?", [huge])
+      assert detail =~ "parameter 1"
+      assert byte_size(detail) < 300
+    end
+
+    test "refuses a list or map holding a value JSON has no text for" do
+      assert {:error, {:invalid_param, detail}} = Notebook.query("SELECT ?", [[{:a, 1}]])
+      assert detail =~ "parameter 1"
+
+      assert {:error, {:invalid_param, detail}} =
+               Notebook.query("SELECT ?", [%{"k" => self()}])
+
+      assert detail =~ "parameter 1"
+    end
+
+    test "the one-argument calls bind nothing, so a placeholder there is SQLite's error" do
+      assert {:error, %Exqlite.Error{message: "expected 1 arguments, got 0"}} =
+               Notebook.query("SELECT ?")
+    end
+  end
+
   describe "cold start" do
     @tag doc: """
          This block has NO table-creating setup, so it exercises the genuine cold

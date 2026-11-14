@@ -37,7 +37,7 @@ defmodule YmerNode.ScriptsTest do
 
       assert {:ok, checked} = Scripts.check(code(segment))
       assert checked.name == Macro.underscore(segment)
-      assert checked.contract == 1
+      assert checked.contract == 2
       assert checked.description == "the #{segment} script"
       assert Map.keys(checked.actions) |> Enum.sort() == [:fetch, :ping]
 
@@ -47,7 +47,8 @@ defmodule YmerNode.ScriptsTest do
                secrets: [],
                throttles: %{},
                cache: :text,
-               web_fallback: false
+               web_fallback: false,
+               libraries: %{}
              }
 
       # The negative half of the flag `create` is about to be judged by.
@@ -139,6 +140,8 @@ defmodule YmerNode.ScriptsTest do
 
       assert script.name == Macro.underscore(segment)
       assert script.origin == "authored"
+      assert script.kind == "script"
+      assert script.version == "1.0.0"
       assert script.code_hash == script.accepted_hash
       assert script.accepted_at != nil
       assert Script.accepted?(script)
@@ -171,7 +174,8 @@ defmodule YmerNode.ScriptsTest do
           }
         },
         "cache" => "text",
-        "web_fallback" => false
+        "web_fallback" => false,
+        "libraries" => %{}
       }
 
       assert script.declarations == expected
@@ -305,7 +309,10 @@ defmodule YmerNode.ScriptsTest do
     test "replaces the code and keeps it accepted" do
       segment = segment()
       script = create!(segment)
-      replacement = String.replace(code(segment), "the #{segment} script", "reworded")
+
+      replacement =
+        String.replace(code(segment), "the #{segment} script", "reworded")
+        |> String.replace(~s|"1.0.0"|, ~s|"1.1.0"|)
 
       assert {:ok, updated} = Scripts.update(script.name, replacement)
       assert updated.description == "reworded"
@@ -318,7 +325,10 @@ defmodule YmerNode.ScriptsTest do
       segment = segment()
       purge_on_exit(segment)
       assert {:ok, imported} = Scripts.import(code(segment))
-      replacement = String.replace(code(segment), "the #{segment} script", "reworded")
+
+      replacement =
+        String.replace(code(segment), "the #{segment} script", "reworded")
+        |> String.replace(~s|"1.0.0"|, ~s|"1.1.0"|)
 
       assert {:ok, updated} = Scripts.update(imported.name, replacement)
       assert updated.origin == "authored"
@@ -341,7 +351,10 @@ defmodule YmerNode.ScriptsTest do
     test "changes the parameters of a throttle no other accepted script declares" do
       segment = segment()
       script = create!(segment, throttled("acct", "rate: 60, burst: 2"))
-      replacement = code(segment, throttled("acct", "rate: 30, burst: 1"))
+
+      replacement =
+        code(segment, throttled("acct", "rate: 30, burst: 1"))
+        |> String.replace(~s|"1.0.0"|, ~s|"1.1.0"|)
 
       assert {:ok, updated} = Scripts.update(script.name, replacement)
       assert updated.declarations["throttles"] == %{"acct" => %{"rate" => 30, "burst" => 1}}
@@ -505,7 +518,10 @@ defmodule YmerNode.ScriptsTest do
       create!(segment)
 
       assert {:ok, imported} =
-               Scripts.import(String.replace(code(segment), "script\"", "file\""))
+               Scripts.import(
+                 String.replace(code(segment), "script\"", "file\"")
+                 |> String.replace(~s|"1.0.0"|, ~s|"1.1.0"|)
+               )
 
       assert imported.origin == "imported"
       assert imported.description == "the #{segment} file"
@@ -562,7 +578,8 @@ defmodule YmerNode.ScriptsTest do
                "secrets" => [],
                "throttles" => %{},
                "cache" => "text",
-               "web_fallback" => false
+               "web_fallback" => false,
+               "libraries" => %{}
              }
     end
 
@@ -618,6 +635,54 @@ defmodule YmerNode.ScriptsTest do
       assert {:ok, planted} = Scripts.plant_example("hex.exs")
       assert {:ok, _removed} = Scripts.remove(planted.name)
       assert {:error, {:not_found, _detail}} = Scripts.get(planted.name)
+    end
+  end
+
+  describe "replant_example/2" do
+    setup do
+      purge_on_exit("Hex")
+      :ok
+    end
+
+    defp planted_earlier!(origin) do
+      code = "defmodule Script.Hex do\nend\n"
+      hash = Script.hash(code)
+
+      attrs = %{
+        code: code,
+        code_hash: hash,
+        accepted_hash: hash,
+        origin: origin,
+        version: "0.1.0"
+      }
+
+      %Script{} |> Script.changeset(Map.merge(row_attrs("hex"), attrs)) |> Repo.insert!()
+    end
+
+    test "replaces a shipped row that still holds an earlier build's bytes" do
+      earlier = planted_earlier!("shipped")
+
+      assert {:ok, replanted} = Scripts.replant_example("hex.exs", [earlier.code_hash])
+
+      assert replanted.id == earlier.id
+      assert replanted.code == File.read!(Scripts.example_path("hex.exs"))
+      assert replanted.version == "1.0.0"
+      assert replanted.origin == "shipped"
+      assert Script.accepted?(replanted)
+      refute Code.ensure_loaded?(Module.concat(["Script", "Hex"]))
+    end
+
+    test "leaves an edited example, an operator's copy and an absent row as they are" do
+      assert {:ok, nil} = Scripts.replant_example("hex.exs", ["anything"])
+
+      edited = planted_earlier!("shipped")
+      assert {:ok, kept} = Scripts.replant_example("hex.exs", ["another build's hash"])
+      assert kept.code == edited.code
+
+      Repo.delete!(kept)
+      imported = planted_earlier!("imported")
+      assert {:ok, kept} = Scripts.replant_example("hex.exs", [imported.code_hash])
+      assert kept.code == imported.code
     end
   end
 
@@ -784,7 +849,7 @@ defmodule YmerNode.ScriptsTest do
 
       assert {:ok, without} = Scripts.describe(script.name)
       assert without.code == nil
-      assert without.contract == 1
+      assert without.contract == 2
       assert %{fetch: %{write: false}} = without.actions
 
       assert without.declarations == %{
@@ -793,7 +858,8 @@ defmodule YmerNode.ScriptsTest do
                "secrets" => [],
                "throttles" => %{},
                "cache" => "text",
-               "web_fallback" => false
+               "web_fallback" => false,
+               "libraries" => %{}
              }
 
       assert {:ok, with_code} = Scripts.describe(script.name, code: true)
@@ -862,6 +928,387 @@ defmodule YmerNode.ScriptsTest do
     end
   end
 
+  describe "a library is never run" do
+    test "run and a schedule are refused, naming it as a library" do
+      library = create_library!(segment())
+
+      assert {:error, {:not_runnable, detail}} = Scripts.run(library.name, "echo", %{})
+      assert detail =~ "#{library.name} is a library"
+
+      assert {:error, {:not_runnable, _detail}} =
+               YmerNode.Schedules.add(%{
+                 name: "never-#{library.name}",
+                 script: library.name,
+                 action: "echo",
+                 cron_expression: "0 * * * *"
+               })
+    end
+
+    test "run refuses a script whose library is no longer held, with the library's text" do
+      library_segment = segment()
+      once = {__MODULE__, library_segment}
+      on_exit(fn -> :persistent_term.erase(once) end)
+      on_exit(fn -> Compiler.purge(Module.concat(["Library", library_segment])) end)
+
+      # A body that cannot run twice in one VM, so the restore after the refused
+      # write below fails and leaves the library Broken.
+      code =
+        String.replace(
+          library_code(library_segment, "1.0.0"),
+          "  use YmerNode.Library\n",
+          "  use YmerNode.Library\n\n" <>
+            "  if :persistent_term.get(#{inspect(once)}, false), do: raise(\"compiled twice\")\n" <>
+            "  :persistent_term.put(#{inspect(once)}, true)\n"
+        )
+
+      assert {:ok, library} = Scripts.create(code)
+      dependent = create!(segment(), declaring(library.name, "~> 1.0"))
+
+      assert {:error, _refused} = Loader.load(String.replace(code, ~s|"1.0.0"|, ~s|"1.0.1"|))
+      assert %{loaded?: false} = Loader.facts(library.name)
+      assert %{loaded?: true} = Loader.facts(dependent.name)
+
+      assert {:error, {:library_broken, detail}} = Scripts.run(dependent.name, "ping", %{})
+      assert detail =~ "#{dependent.name} declares the library #{library.name}"
+      assert detail =~ "#{dependent.name} runs again once #{library.name} is held"
+      refute detail =~ "store #{dependent.name} again"
+    end
+  end
+
+  describe "libraries in list/0 and describe/2" do
+    test "one list carries both kinds with their versions, a library with no actions" do
+      library = create_library!(segment())
+      script = create!(segment())
+
+      entries = Map.new(Scripts.list(), &{&1.name, &1})
+
+      assert %{kind: "library", version: "1.0.0", actions: [], loaded?: true} =
+               entries[library.name]
+
+      assert %{kind: "script", version: "1.0.0", actions: [:fetch, :ping]} = entries[script.name]
+    end
+
+    test "describes a script's libraries with the version this node holds of each" do
+      library = create_library!(segment())
+      script = create!(segment(), declaring(library.name, "~> 1.0"))
+
+      assert {:ok, described} = Scripts.describe(script.name)
+      assert described.version == "1.0.0"
+
+      assert described.libraries == [
+               %{name: library.name, requirement: "~> 1.0", version: "1.0.0"}
+             ]
+    end
+
+    test "describes a library's API and the scripts that declare it" do
+      library = create_library!(segment())
+      dependent = create!(segment(), declaring(library.name, ">= 0.0.0"))
+
+      assert {:ok, described} = Scripts.describe(library.name)
+      assert described.kind == "library"
+      assert described.actions == %{}
+      assert described.dependents == [%{name: dependent.name, requirement: ">= 0.0.0"}]
+
+      assert [%{name: name, signature: "echo(value)", doc: "Answers what it is handed."}] =
+               described.api
+
+      assert name =~ ".echo/1"
+    end
+
+    @tag doc: """
+         Every row stored before version/0 was required arrives at the upgrade
+         this way. A failure means such a row stops listing or describing with
+         no version, stops refusing its run with the fix, or the update that
+         repairs it is refused.
+         """
+    test "a row stored before version/0 is Broken with no version until an update repairs it" do
+      segment = segment()
+      purge_on_exit(segment)
+      name = Macro.underscore(segment)
+
+      legacy =
+        String.replace(code(segment), ~s|  @impl true\n  def version, do: "1.0.0"\n\n|, "")
+
+      attrs = %{
+        row_attrs(name)
+        | code: legacy,
+          code_hash: Script.hash(legacy),
+          accepted_hash: Script.hash(legacy),
+          version: nil
+      }
+
+      Repo.insert!(struct!(Script, Map.put(attrs, :kind, "script")))
+      Loader.boot_compile()
+
+      assert %{version: nil, loaded?: false} = Enum.find(Scripts.list(), &(&1.name == name))
+      assert {:ok, %{version: nil, error: {:missing_callbacks, _detail}}} = Scripts.describe(name)
+      assert {:error, {:not_loaded, detail}} = Scripts.run(name, "ping", %{})
+      assert detail =~ "version/0 — add it"
+
+      assert {:ok, %{version: "1.0.0"}} = Scripts.update(name, code(segment))
+      assert %{loaded?: true, version: "1.0.0"} = Loader.facts(name)
+    end
+  end
+
+  describe "libraries at the write doors" do
+    test "create stores a library with its version, no actions and no declarations" do
+      library = create_library!(segment())
+
+      assert library.kind == "library"
+      assert library.version == "1.0.0"
+      assert library.declarations == %{}
+      assert %{loaded?: true, kind: :library, actions: actions} = Loader.facts(library.name)
+      assert actions == %{}
+    end
+
+    test "a script and a library share one name space" do
+      segment = segment()
+      library = create_library!(segment)
+      purge_on_exit(segment)
+
+      assert {:error, {:name_taken, detail}} = Scripts.create(code(segment))
+      assert detail =~ "a library named #{library.name} already exists"
+      assert detail =~ "give this script another name"
+      refute detail =~ "update it"
+    end
+
+    test "a library may take a name a built-in reference source reserves for scripts" do
+      assert %{name: "web", kind: "library"} = create_library!("Web")
+    end
+
+    @tag doc: """
+         A row whose stored code this node's parse refuses names no module to
+         compare, so its kind is what stops code of the other kind replacing it: the
+         stored code is the row's only copy.
+         """
+    test "refuses code of the other kind over a row whose stored code no longer parses" do
+      segment = segment()
+      name = Macro.underscore(segment)
+      stored = "defmodule Script.#{segment} do\n  alias Library, as: L\nend\n"
+      assert {:error, _refused} = Compiler.parse(stored)
+
+      Repo.insert!(
+        struct!(Script, %{
+          row_attrs(name)
+          | code: stored,
+            code_hash: Script.hash(stored),
+            accepted_hash: Script.hash(stored)
+        })
+      )
+
+      on_exit(fn -> Compiler.purge(Module.concat(["Library", segment])) end)
+
+      assert {:error, {:module_mismatch, detail}} =
+               Scripts.import(library_code(segment, "1.0.0"))
+
+      assert detail =~ "#{name} is a script and this code is a library"
+      assert %Script{code: ^stored, kind: "script"} = Repo.get_by(Script, name: name)
+    end
+
+    test "a raise inside a library names the library's own line" do
+      library_segment = segment()
+      library = create_library!(library_segment)
+
+      raising =
+        String.replace(
+          library_code(library_segment, "1.0.1"),
+          ~s|  def echo(value), do: value\n|,
+          ~s|  def echo(_value), do: raise("library boom")\n|
+        )
+
+      assert {:ok, _raising} = Scripts.update(library.name, raising)
+
+      script_segment = segment()
+      purge_on_exit(script_segment)
+
+      calling =
+        String.replace(
+          code(script_segment, declaring(library.name, "~> 1.0")),
+          ~s|def run(:ping, _args, _context), do: {:ok, %{"pong" => true}}|,
+          ~s|def run(:ping, _args, _context), do: {:ok, Library.#{library_segment}.echo(1)}|
+        )
+
+      assert {:ok, script} = Scripts.create(calling)
+      assert {:error, {:script_raised, detail}} = Scripts.run(script.name, "ping", %{})
+      assert detail =~ "library boom"
+      assert detail =~ "library:#{library.name}:"
+    end
+
+    test "refuses code of the other kind over a library, by kind, at every door" do
+      segment = segment()
+      library = create_library!(segment)
+      purge_on_exit(segment)
+
+      for answer <- [
+            Scripts.check(code(segment)),
+            Scripts.update(library.name, code(segment)),
+            Scripts.import(code(segment))
+          ] do
+        assert {:error, {:module_mismatch, detail}} = answer
+        assert detail =~ "#{library.name} is a library and this code is a script"
+        refute detail =~ "remove #{library.name}"
+      end
+
+      assert %Script{kind: "library"} = Repo.get_by(Script, name: library.name)
+    end
+
+    test "refuses a script whose library is not held, and lands it once the library is" do
+      library_segment = segment()
+      library_name = Macro.underscore(library_segment)
+      script_segment = segment()
+      purge_on_exit(script_segment)
+
+      declared = declaring(library_name, "~> 1.0")
+
+      assert {:error, {:library_missing, detail}} = Scripts.create(code(script_segment, declared))
+      assert detail =~ "the library #{library_name} (~> 1.0)"
+      assert {:error, {:not_found, _detail}} = Scripts.get(Macro.underscore(script_segment))
+
+      create_library!(library_segment)
+      assert {:ok, script} = Scripts.create(code(script_segment, declared))
+      assert script.declarations["libraries"] == %{library_name => "~> 1.0"}
+    end
+
+    @tag doc: """
+         One version names one code on a node; a failure means new code landed
+         under the version already stored, so a list can no longer say which
+         code a number stands for.
+         """
+    test "new code needs a new version, a lower one included, and the same code needs none" do
+      segment = segment()
+      library = create_library!(segment)
+
+      changed =
+        String.replace(library_code(segment, "1.0.0"), "the #{segment} library", "changed")
+
+      assert {:error, {:version_unchanged, detail}} = Scripts.update(library.name, changed)
+      assert detail =~ "#{library.name} is already held at 1.0.0 with other code"
+
+      assert {:ok, %{version: "0.9.0"}} =
+               Scripts.update(library.name, String.replace(changed, ~s|"1.0.0"|, ~s|"0.9.0"|))
+
+      assert {:ok, %{version: "0.9.0"}} =
+               Scripts.import(String.replace(changed, ~s|"1.0.0"|, ~s|"0.9.0"|))
+    end
+
+    test "refuses to move a library outside a dependent's requirement, naming the dependent" do
+      library_segment = segment()
+      library = create_library!(library_segment)
+      dependent = create!(segment(), declaring(library.name, "~> 1.0"))
+
+      assert {:error, {:requirement_broken, detail}} =
+               Scripts.update(library.name, library_code(library_segment, "2.0.0"))
+
+      assert detail =~ "#{library.name} 2.0.0 is outside what #{dependent.name} (~> 1.0) require"
+      assert {:ok, %{version: "1.0.0"}} = Scripts.get(library.name)
+      assert %{loaded?: true, version: "1.0.0"} = Loader.facts(library.name)
+
+      assert {:ok, %{version: "1.1.0"}} =
+               Scripts.update(library.name, library_code(library_segment, "1.1.0"))
+    end
+
+    @tag doc: """
+         Nothing checks a script kept Broken for its library again when the
+         library lands, so the refusal text tells the operator to store the
+         script again. A failure means that advice no longer brings the script
+         back.
+         """
+    test "a script kept Broken for its library is held again once stored again, unchanged" do
+      library_segment = segment()
+      library = create_library!(library_segment)
+      dependent = create!(segment(), declaring(library.name, "~> 1.0"))
+
+      broken =
+        String.replace(
+          library_code(library_segment, "1.0.0"),
+          ~s|  @impl true\n  def version, do: "1.0.0"\n|,
+          ""
+        )
+
+      Repo.update_all(from(script in Script, where: script.name == ^library.name),
+        set: [code: broken, code_hash: Script.hash(broken), accepted_hash: Script.hash(broken)]
+      )
+
+      Loader.boot_compile()
+
+      assert %{loaded?: false, error: {:library_broken, detail}} = Loader.facts(dependent.name)
+      assert detail =~ "then store #{dependent.name} again"
+
+      assert {:ok, %{version: "1.0.1"}} =
+               Scripts.update(library.name, library_code(library_segment, "1.0.1"))
+
+      assert %{loaded?: false} = Loader.facts(dependent.name)
+
+      assert {:ok, _dependent} = Scripts.update(dependent.name, dependent.code)
+      assert %{loaded?: true} = Loader.facts(dependent.name)
+    end
+
+    test "refuses to remove a library a script declares, and removes it once none does" do
+      library = create_library!(segment())
+      dependent = create!(segment(), declaring(library.name, ">= 0.0.0"))
+
+      assert {:error, {:library_in_use, detail}} = Scripts.remove(library.name)
+      assert detail =~ "#{library.name} is declared by #{dependent.name} (>= 0.0.0)"
+      assert %{loaded?: true} = Loader.facts(library.name)
+
+      assert {:ok, _removed} = Scripts.remove(dependent.name)
+      assert {:ok, %{script: %{name: name}}} = Scripts.remove(library.name)
+      assert name == library.name
+    end
+
+    test "refuses to remove a library in use by its dependents, even while one runs" do
+      library = create_library!(segment())
+      script = napping!(segment())
+
+      dependent =
+        String.replace(
+          script.code,
+          ~s|def declarations, do: %{hosts: [], url_action: nil, secrets: []}|,
+          "def declarations, do: " <> declaring(library.name, ">= 0.0.0")
+        )
+        |> String.replace(~s|def version, do: "1.0.0"|, ~s|def version, do: "1.0.1"|)
+
+      assert {:ok, _declaring} = Scripts.update(script.name, dependent)
+      run = Task.async(fn -> Scripts.run(script.name, "naps", %{}) end)
+      assert wait_until(fn -> Runner.in_flight?(script.name) end)
+
+      assert {:error, {:library_in_use, detail}} = Scripts.remove(library.name)
+      assert detail =~ "#{library.name} is declared by #{script.name}"
+      # Still running after the answer, so the answer was given mid-run.
+      assert Runner.in_flight?(script.name)
+
+      assert {:ok, _slept} = Task.await(run)
+    end
+  end
+
+  defp library_code(segment, version) do
+    """
+    defmodule Library.#{segment} do
+      use YmerNode.Library
+
+      @impl true
+      def description, do: "the #{segment} library"
+
+      @impl true
+      def version, do: "#{version}"
+
+      @doc "Answers what it is handed."
+      def echo(value), do: value
+    end
+    """
+  end
+
+  defp create_library!(segment, version \\ "1.0.0") do
+    on_exit(fn -> Compiler.purge(Module.concat(["Library", segment])) end)
+
+    assert {:ok, library} = Scripts.create(library_code(segment, version))
+    library
+  end
+
+  defp declaring(library, requirement) do
+    ~s|%{hosts: [], url_action: nil, secrets: [], libraries: %{"#{library}" => "#{requirement}"}}|
+  end
+
   defp segment, do: "Ctx#{System.unique_integer([:positive])}"
 
   defp wait_until(fun, attempts \\ 100) do
@@ -898,6 +1345,9 @@ defmodule YmerNode.ScriptsTest do
 
       @impl true
       def description, do: "sleeps, briefly"
+
+      @impl true
+      def version, do: "1.0.0"
 
       @impl true
       def actions do
@@ -943,6 +1393,9 @@ defmodule YmerNode.ScriptsTest do
       def description, do: "reads one secret"
 
       @impl true
+      def version, do: "1.0.0"
+
+      @impl true
       def actions, do: %{read: %{description: "reads the token", properties: %{}, write: false}}
 
       @impl true
@@ -968,6 +1421,9 @@ defmodule YmerNode.ScriptsTest do
 
       @impl true
       def description, do: "asks for a throttle it never declared"
+
+      @impl true
+      def version, do: "1.0.0"
 
       @impl true
       def actions, do: %{read: %{description: "reads a page", properties: %{}, write: false}}
@@ -1007,6 +1463,9 @@ defmodule YmerNode.ScriptsTest do
       def description, do: "the #{segment} script"
 
       @impl true
+      def version, do: "1.0.0"
+
+      @impl true
       def actions do
         %{
           fetch: %{
@@ -1040,6 +1499,7 @@ defmodule YmerNode.ScriptsTest do
       accepted_at: DateTime.utc_now() |> DateTime.truncate(:second),
       origin: "authored",
       contract: 1,
+      version: "1.0.0",
       description: name,
       declarations: %{"hosts" => [], "url_action" => nil, "secrets" => []}
     }

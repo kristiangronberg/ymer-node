@@ -10,7 +10,8 @@ defmodule YmerNode.Mcp.Tools.ScriptAuthor.Schemas do
   @script %{
     "type" => "string",
     "description" =>
-      "The script's name — derived from its module, so `Script.Hex` is \"hex\". " <>
+      "A script's or library's name — derived from its module, so `Script.Hex` " <>
+        ~s|is "hex" and `Library.Crosskey` is "crosskey". | <>
         "`scripts list` names them all.",
     "minLength" => 1,
     "examples" => ["hex", "req_test"]
@@ -20,19 +21,25 @@ defmodule YmerNode.Mcp.Tools.ScriptAuthor.Schemas do
     "type" => "string",
     "description" =>
       "The whole Elixir module, as code. One top-level `defmodule Script.<Name>` " <>
-        "that does `use YmerNode.Script` and implements description/0, actions/0, " <>
-        "declarations/0 and run/3.",
+        "that does `use YmerNode.Script` and implements description/0, version/0, " <>
+        "actions/0, declarations/0 and run/3 — or, for a library, one " <>
+        "`defmodule Library.<Name>` that does `use YmerNode.Library` and " <>
+        "implements description/0 and version/0.",
     "minLength" => 1
   }
 
   @acceptance """
-  Storing code accepts it, at exactly those bytes. Acceptance refuses six \
-  things: a `url_action` `actions/0` does not declare; a `url_action` whose \
-  schema has no `url` property; a name that is a built-in reference source \
-  (web, file, other); a host another accepted script already claims; a web \
-  fallback (`web_fallback: true`) while another accepted script is the web \
-  fallback; and a throttle another accepted script declares with other \
-  parameters.\
+  Storing code accepts it, at exactly those bytes. Acceptance refuses: a \
+  `url_action` `actions/0` does not declare; a `url_action` whose schema has no \
+  `url` property; a name that is a built-in reference source (web, file, \
+  other); a host another accepted script already claims; a web fallback \
+  (`web_fallback: true`) while another accepted script is the web fallback; a \
+  throttle another accepted script declares with other parameters; a \
+  `Library.` module the code names and `libraries` does not declare; a \
+  declared library this node does not hold, holds Broken, or holds at a \
+  version outside the requirement; and, where a write lands new code, a \
+  version/0 the stored row already holds with other code, or a library version \
+  outside what a declaring script requires.\
   """
 
   @schemas %{
@@ -74,7 +81,10 @@ defmodule YmerNode.Mcp.Tools.ScriptAuthor.Schemas do
       defaults: %{},
       notes:
         "Whole replacement, not a patch, and there is no version history — the " <>
-          "previous code is gone. The new code must derive to the SAME name; " <>
+          "previous code is gone, and a version/0 names the code it stands for: " <>
+          "new code needs one other than the stored one, a lower one to roll " <>
+          "back, and a library's must stay inside every requirement of the " <>
+          "scripts declaring it. The new code must derive to the SAME name; " <>
           "renaming is `remove` then `create`. Refused while a run of that script " <>
           "is in flight, because landing it would kill the run mid-way; retry when " <>
           "it ends. " <> @acceptance,
@@ -101,7 +111,8 @@ defmodule YmerNode.Mcp.Tools.ScriptAuthor.Schemas do
           "it is not in a repository. Any reference whose source this script " <>
           "declared falls back to its built-in classification the same moment. " <>
           "Its schedules are removed with it, and the answer names them. Refused " <>
-          "while a run of that script is in flight.",
+          "while a run of that script is in flight. A library any script declares " <>
+          "is refused, naming those scripts.",
       related: ["update", "create"]
     }
   }

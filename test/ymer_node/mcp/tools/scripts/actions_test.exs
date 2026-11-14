@@ -40,7 +40,7 @@ defmodule YmerNode.Mcp.Tools.Scripts.ActionsTest do
       script = create!(segment())
 
       assert {:ok, detail, hint_context} = Actions.run(:describe, %{"script" => script.name})
-      assert detail.contract == 1
+      assert detail.contract == 2
       assert %{"ping" => %{write: false}} = detail.actions
       refute Map.has_key?(detail, :code)
       assert hint_context == %{script: script.name, action: "fetch"}
@@ -211,6 +211,9 @@ defmodule YmerNode.Mcp.Tools.Scripts.ActionsTest do
 
       @impl true
       def description, do: "the #{segment} script"
+
+      @impl true
+      def version, do: "1.0.0"
 
       @impl true
       def actions do

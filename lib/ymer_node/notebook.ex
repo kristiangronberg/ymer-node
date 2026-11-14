@@ -166,8 +166,22 @@ defmodule YmerNode.Notebook do
   `changes()` on the
   same connection, NOT from exqlite's result, whose command classification is an
   unreliable case-sensitive substring match.
+
+  `params` binds the statement's `?` and `?NNN` placeholders, in order, so a value
+  is never quoted into the SQL by hand. Floats, strings, `nil` and integers inside
+  SQLite's signed 64-bit range bind as themselves; `true` and `false` bind as `1`
+  and `0`, SQLite's own booleans; a list or a map binds as its JSON text, which
+  `json_each/1` and `json_extract/2` read. Anything else, a wider integer
+  included, is refused as `{:error, {:invalid_param, detail}}` naming its
+  position, before the statement runs: unencoded, exqlite binds a list as a blob of
+  its bytes and a boolean as the text `"true"`, raises on a map, and fails a wider
+  integer in its NIF with no position. Send such an integer as a string.
   """
-  def execute(sql) when is_binary(sql), do: with_notebook(:write, fn -> do_execute(sql) end)
+  def execute(sql, params \\ []) when is_binary(sql) and is_list(params) do
+    with {:ok, bound} <- bind_params(params) do
+      with_notebook(:write, fn -> do_execute(sql, bound) end)
+    end
+  end
 
   @doc """
   Runs a read-only `SELECT`/`WITH`/`EXPLAIN` statement inside an always-rolled-back
@@ -175,8 +189,14 @@ defmodule YmerNode.Notebook do
   (`:not_read_only` if the statement is not a read — `PRAGMA` is rejected; use the
   `tables`/`schema` introspection actions instead). Columns are recovered via
   `command: :select` regardless of exqlite's command heuristic.
+
+  `params` binds as `execute/2`'s does, and is refused the same way.
   """
-  def query(sql) when is_binary(sql), do: with_notebook(:read, fn -> do_query(sql) end)
+  def query(sql, params \\ []) when is_binary(sql) and is_list(params) do
+    with {:ok, bound} <- bind_params(params) do
+      with_notebook(:read, fn -> do_query(sql, bound) end)
+    end
+  end
 
   @doc """
   Lists user tables (excludes `_meta`, `sqlite_*` internals, and sqlite-vec shadow
@@ -336,7 +356,7 @@ defmodule YmerNode.Notebook do
   # that fact three times is three chances for the routing checks to disagree
   # about what they are routing. What runs is still the raw `sql`: the classifier's
   # input is what is rebound here, never the statement.
-  defp do_execute(sql) do
+  defp do_execute(sql, params) do
     ensure_meta!()
     stripped = strip_comments(sql)
     lead = first_keyword(stripped)
@@ -351,15 +371,15 @@ defmodule YmerNode.Notebook do
       lead == "" -> {:ok, %{affected_rows: 0}}
       lead in @blocked_leads -> {:error, :blocked_statement}
       vacuum_into?(lead, stripped) -> {:error, :blocked_vacuum_into}
-      true -> run_write(sql, lead)
+      true -> run_write(sql, lead, params)
     end
   end
 
-  defp do_query(sql) do
+  defp do_query(sql, params) do
     ensure_meta!()
 
     if leading_keyword(sql) in @read_only_leads do
-      run_read_only(sql)
+      run_read_only(sql, params)
     else
       {:error, :not_read_only}
     end
@@ -424,9 +444,9 @@ defmodule YmerNode.Notebook do
   # ensure_meta!/0 already ran OUTSIDE this checkout, so its DDL cannot perturb changes().
   # Executing raw agent-authored SQL against the user/LLM-governed notebook DB is
   # this module's purpose (see @moduledoc) — not an injection surface.
-  defp run_write(sql, lead) do
+  defp run_write(sql, lead, params) do
     Repo.checkout(fn ->
-      case Repo.query(sql) do
+      case Repo.query(sql, params) do
         {:ok, _result} -> {:ok, %{affected_rows: write_count(lead)}}
         {:error, reason} -> {:error, reason}
       end
@@ -525,11 +545,11 @@ defmodule YmerNode.Notebook do
   # forward this opt, the column-recovery tests fail RED — recover columns via the fallback
   # (detect command != nil and rows != [] and columns == [], or prepare the statement and
   # read columns directly) rather than trusting the result.
-  # Raw notebook SQL by design — same rationale as run_write/2.
-  defp run_read_only(sql) do
+  # Raw notebook SQL by design — same rationale as run_write/3.
+  defp run_read_only(sql, params) do
     outcome =
       Repo.transaction(fn ->
-        case Repo.query(sql, [], command: :select) do
+        case Repo.query(sql, params, command: :select) do
           {:ok, result} -> Repo.rollback({:ok, result})
           {:error, reason} -> Repo.rollback({:error, reason})
         end
@@ -542,6 +562,57 @@ defmodule YmerNode.Notebook do
       {:error, {:error, reason}} ->
         {:error, reason}
     end
+  end
+
+  # Each value in the form SQLite binds, or the first that has none, by its
+  # 1-based position — the number a `?NNN` placeholder would name.
+  defp bind_params(params) do
+    params
+    |> Enum.with_index(1)
+    |> Enum.reduce_while({:ok, []}, fn {value, position}, {:ok, bound} ->
+      case bind_param(value) do
+        {:ok, value} -> {:cont, {:ok, [value | bound]}}
+        :error -> {:halt, {:error, {:invalid_param, param_fault(position, value)}}}
+      end
+    end)
+    |> case do
+      {:ok, bound} -> {:ok, Enum.reverse(bound)}
+      refused -> refused
+    end
+  end
+
+  defp bind_param(nil), do: {:ok, nil}
+  defp bind_param(true), do: {:ok, 1}
+  defp bind_param(false), do: {:ok, 0}
+
+  # SQLite stores a signed 64-bit integer; exqlite fails a wider one in its NIF
+  # with no position, so it is refused here, by position, like any value that
+  # does not bind.
+  defp bind_param(value)
+       when is_integer(value) and value in -9_223_372_036_854_775_808..9_223_372_036_854_775_807,
+       do: {:ok, value}
+
+  defp bind_param(value) when is_integer(value), do: :error
+
+  defp bind_param(value) when is_float(value) or is_binary(value), do: {:ok, value}
+
+  defp bind_param(value) when is_list(value) or (is_map(value) and not is_struct(value)) do
+    {:ok, JSON.encode!(value)}
+  rescue
+    _not_json -> :error
+  end
+
+  defp bind_param(_value), do: :error
+
+  # Rendered without the value: a huge integer's digits are unbounded.
+  defp param_fault(position, value) when is_integer(value) do
+    "parameter #{position} is an integer outside SQLite's signed 64-bit range, which " <>
+      "does not bind — send it as a string"
+  end
+
+  defp param_fault(position, value) do
+    "parameter #{position} is #{inspect(value, limit: 5, printable_limit: 80)}, which " <>
+      "does not bind — send an integer, a float, a string, null, a boolean, a list or a map"
   end
 
   # First SQL keyword, upcased — with ALL comments removed and leading whitespace,

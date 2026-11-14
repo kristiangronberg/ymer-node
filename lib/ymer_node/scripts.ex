@@ -1,7 +1,8 @@
 defmodule YmerNode.Scripts do
   @moduledoc """
-  The scripts this node has accepted, and every door they arrive and leave
-  through — the context both script tools wrap and the node's own callers use.
+  The scripts this node has accepted, the libraries they call, and every door
+  either arrives and leaves through — the context both script tools wrap and the
+  node's own callers use.
 
   A script is an Elixir module kept as a row and compiled into this VM. What
   makes it *runnable* is not that it is stored: it is that the node has accepted
@@ -25,6 +26,7 @@ defmodule YmerNode.Scripts do
       Runnable --> Unaccepted : sync replaces the code (later)
       Unaccepted --> Runnable : accept
       Runnable --> Broken : a boot this code no longer compiles against
+      Runnable --> Broken : a boot at which a library it declares is not held
       Runnable --> Broken : a restore whose recompile fails
       Broken --> Runnable : update with code that compiles
 
@@ -44,7 +46,12 @@ defmodule YmerNode.Scripts do
   boot — after a node upgrade moves the contract or a battery underneath it, the
   boot compile fails, the row is **kept** with its diagnostics, and `run/3`
   refuses it with them; dropping the row would destroy the only copy of code the
-  operator now has to fix — and by one write-side path that leaves the row
+  operator now has to fix. A script whose declared library is missing, Broken or
+  out of range at boot is kept Broken the same way, with that refusal's text (or
+  the compile's own error, where it requires, imports or builds a struct of that
+  library), and stays Broken once the library is fixed, until it is stored again
+  (`update` accepts the same code) or the node restarts. A row also reaches
+  `Broken` by one write-side path that leaves the row
   unchanged: a refused re-accept, or a write whose candidate failed, puts the
   stored code back by compiling it again, and a body that cannot run twice in
   one VM (a named table it creates, a process it registers) fails that compile.
@@ -53,7 +60,9 @@ defmodule YmerNode.Scripts do
 
   ## What acceptance refuses
 
-  Six things, and where each is refused:
+  The refusals that turn on what else this node holds, and the compiler's checks
+  of what a script declares, with where each is taken — the compiler's own
+  refusals of code it cannot load are its moduledoc's (`YmerNode.Scripts.Compiler`):
 
   | refusal | where |
   | --- | --- |
@@ -63,25 +72,33 @@ defmodule YmerNode.Scripts do
   | a host another accepted script already claims | here, after the compile — inside the loader's message at every write door, in the open at the build's |
   | a web fallback while another accepted script is the web fallback | here, beside the host rule and wherever it runs |
   | a throttle another accepted script declares with other parameters | here, beside the host rule and wherever it runs |
+  | a `Library.` module the code names and its declarations do not | `YmerNode.Scripts.Compiler`, at every compile |
+  | a declared library this node does not hold, holds Broken, or holds out of range | `YmerNode.Scripts.Loader`, inside its message at every write door and at boot; a `require`, an `import` or a struct of such a library fails the compile first, with the compiler's error |
+  | new code at the version already stored | here, inside the loader's message, at `update/2` and `import/1` |
+  | a library version outside a declaring script's requirement | here, inside the loader's message, at `create/1`, `update/2` and `import/1` |
 
-  The first two are properties of the code alone, so the compiler settles them
-  before a row exists and no write can get past them. The last four depend on
-  what *else* is in the database — the references vocabulary and the other
-  accepted rows — which the compiler cannot see. All six are checked at every
-  acceptance door: `create/1`, `update/2`, `import/1` and `accept/1` — and at
-  `check/1`, which promises every refusal `create/1` would give. The build's
+  The compiler's are properties of the code alone, so it settles them before a
+  row exists and no write can get past them. The rest depend on what *else* is
+  in the database or this VM — the references vocabulary, the other accepted
+  rows, the libraries this boot holds — which the compiler cannot see. All but
+  the last two are checked at every acceptance door: `create/1`, `update/2`,
+  `import/1` and `accept/1` — and at `check/1`, which promises each of those
+  `create/1` would give. The last two are taken only where a write lands new
+  code, at the doors their rows name: `accept/1` never changes the stored
+  version, and `check/1` answers neither. The build's
   door, `plant_example/1`, checks the host, fallback and throttle rules and not the
   name's: its name is derived from a file this repo ships, never from code
   arriving from outside.
 
-  Where each of the last four sits is load-bearing rather than tidy. Compiling
-  `Script.X` replaces whatever `Script.X` this VM is running, so a refusal taken
-  *after* the compile has already displaced a live script for as long as it
-  takes to put it back. Everything readable off the derived name therefore goes
-  first — the reserved-name rule, and `create/1`'s own "that name is taken" —
-  which is what stops a create from ever reaching the compiler under a name that
-  belongs to another script. Only the host, fallback and throttle rules need the compiled
-  module, and only they are answered afterwards — and they are answered, with
+  Where the name, host, fallback, throttle, library and version rules sit is
+  load-bearing rather than tidy. Compiling `Script.X` replaces whatever
+  `Script.X` this VM is running, so a refusal taken *after* the compile has
+  already displaced a live script for as long as it takes to put it back.
+  Everything readable off the derived name therefore goes first — the
+  reserved-name rule, and `create/1`'s own "that name is taken" — which is what
+  stops a create from ever reaching the compiler under a name that belongs to
+  another script. Every rule that needs the compiled module or the libraries
+  this VM holds is answered afterwards — and answered, with
   the row write behind them, **inside the loader's own message**, as the commit
   `YmerNode.Scripts.Loader.load/2` runs between the compile and the recording of
   the facts. That is what makes the far side of the compile gapless: a run
@@ -121,6 +138,7 @@ defmodule YmerNode.Scripts do
           Compiler
           Loader
           Runner
+          Libraries
       end
 
       subgraph external
@@ -131,6 +149,8 @@ defmodule YmerNode.Scripts do
 
       S -->|"parse before every write"| Compiler
       S -->|"load with the store as its commit, unload, facts"| Loader
+      S -->|"dependents, versions in range"| Libraries
+      Loader -->|"libraries held, nothing removed in use"| Libraries
       S -->|"run/3"| Runner
       S --> Script
       S --> Repo
@@ -210,7 +230,14 @@ defmodule YmerNode.Scripts do
   - **No version history.** An `update/2` replaces the code and the previous
     text is gone: a standard script's history is its repository's, an ad-hoc
     script's is the session that wrote it. Revisit if a script is ever lost to a
-    bad update.
+    bad update. What the node keeps instead is the author's own number: new code
+    for a row lands only under a version other than the stored one, so one
+    version names one code here, and a rollback is the older file imported again.
+  - **A library with dependents is refused, never cascaded.** A remove of a
+    script cascades to its schedules, which are the node's own rows; a script
+    declaring a library is code that may be the only copy, so a remove — or an
+    update out of a script's range — is refused naming the scripts, and the fix
+    is theirs to make first.
   - **Declarations are written string-keyed.** The row's `declarations` column
     round-trips through JSON, so what goes in atom-keyed comes back string-keyed;
     writing the string form is what makes a freshly-inserted row and a re-read
@@ -231,6 +258,7 @@ defmodule YmerNode.Scripts do
   alias YmerNode.Repo
   alias YmerNode.Schedules.InFlight
   alias YmerNode.Scripts.Compiler
+  alias YmerNode.Scripts.Libraries
   alias YmerNode.Scripts.Loader
   alias YmerNode.Scripts.Runner
   alias YmerNode.Scripts.Script
@@ -254,11 +282,12 @@ defmodule YmerNode.Scripts do
   # ─── Reading ────────────────────────────────────────────────────────
 
   @doc """
-  Every script, slim: what a worker reads to choose one.
+  Every script and library, slim: what a worker reads to choose one.
 
-  Each entry carries the row's `name`, `description`, `origin` and `accepted?`,
-  the action names, and — from this boot's compile — `loaded?` plus the `error`
-  that explains a script that will not run. Ordered by name, so two calls agree.
+  Each entry carries the row's `name`, `kind`, `version`, `description`, `origin`
+  and `accepted?`, the action names — none for a library, which is never run —
+  and, from this boot's compile, `loaded?` plus the `error` that explains a row
+  that will not compile. One list, ordered by name, so two calls agree.
   """
   def list do
     facts = Loader.all_facts()
@@ -270,8 +299,15 @@ defmodule YmerNode.Scripts do
   end
 
   @doc """
-  One script in full — everything `list/0` carries plus the contract, the
-  acceptance time, the declarations and each action's whole schema.
+  One script or library in full — everything `list/0` carries plus the
+  contract, the acceptance time, the declarations and each action's whole
+  schema.
+
+  A script adds `libraries`: each library it declares, by `name`, with its
+  `requirement` and the `version` this node holds of it, `nil` where it holds
+  none. A library adds its `api` — each documented function, `name`,
+  `signature` and `doc`, from this boot's compile — and its `dependents`: each
+  script declaring it, by `name`, with its `requirement`.
 
   Pass `code: true` for the code itself. It is left out by default because a
   worker asking what a script does should not pay for every line of it, and a
@@ -304,6 +340,11 @@ defmodule YmerNode.Scripts do
   never left out: a flag that disappears when it is false is a flag a reader
   stops checking.
 
+  Two refusals a write can give are not predicted here: new code at the version
+  already stored (`:version_unchanged`) and a library version outside a
+  declaring script's requirement (`:requirement_broken`). Only the write doors
+  take them, inside the loader's message.
+
   The compile itself goes through `YmerNode.Scripts.Loader`, which compiles the
   candidate and puts the stored code back as one operation — reading the row for
   that restore itself. This module reads the row for `existing` and for the
@@ -319,10 +360,10 @@ defmodule YmerNode.Scripts do
   """
   def check(code) when is_binary(code) do
     with {:ok, parsed} <- Compiler.parse(code),
-         :ok <- check_reserved(parsed.name),
+         :ok <- check_reserved(parsed),
          existing = Repo.get_by(Script, name: parsed.name),
-         :ok <- check_same_module(existing, parsed.module),
-         :ok <- check_idle(parsed.name),
+         :ok <- check_same_module(existing, parsed),
+         :ok <- check_idle(parsed),
          {:ok, compiled} <- Loader.check(code),
          :ok <- check_claims(compiled) do
       {:ok, compiled |> Map.drop([:module, :modules]) |> Map.put(:existing, existing != nil)}
@@ -406,21 +447,61 @@ defmodule YmerNode.Scripts do
     end
   end
 
+  # Remediation(removable: once no node holds a pre-version/0 shipped row): the
+  # door the re-plant migration calls, for example rows planted before version/0
+  # was required. plan: 2026-11-13-script-libraries
+  @doc """
+  Brings one example script the package ships up to this build's bytes where its
+  row still holds bytes an earlier build shipped — `file` is its basename under
+  `priv/scripts`, `shipped` the sha256 of every earlier version of it. The build's
+  door again, origin `shipped`: the migration that calls it runs once per node,
+  for a release whose examples changed under rows planted before.
+
+  Only a row of origin `shipped` whose code hash is one of `shipped` is replaced;
+  an example the operator edited, imported or removed is answered as it is,
+  `nil` where there is no row, and so is one already at this build's bytes. It
+  compiles outside the loader, as `plant_example/1` does and for the same
+  reasons, and the same refusals apply.
+  """
+  def replant_example(file, shipped) when is_binary(file) and is_list(shipped) do
+    code = File.read!(example_path(file))
+
+    with {:ok, parsed} <- Compiler.parse(code) do
+      Script
+      |> Repo.get_by(name: parsed.name)
+      |> replant_shipped(code, parsed.module, shipped)
+    end
+  end
+
   @doc "Where one example script sits in this build, by its basename."
   def example_path(file) when is_binary(file),
     do: Application.app_dir(:ymer_node, Path.join("priv/scripts", file))
 
-  # The purge is unconditional because the compile loads the tree before it can
-  # still refuse: `Compiler.compile/1` checks the contract, the callbacks and
-  # the metadata with the modules already loaded, so its refusals arrive with a
-  # tree behind them. Purging only the success path would leave one resident on
-  # exactly the paths this door's docs promise it does not.
+  # A refusal from `Compiler.compile/1` leaves no tree loaded — it purges its
+  # own — so this purge is for the success path: a planted example is accepted
+  # as a row and never left loaded by this door, whose docs promise as much.
   defp plant(code, module) do
     compiled = Compiler.compile(code)
     Compiler.purge(module)
 
     with {:ok, compiled} <- compiled do
       accept_planted(compiled, code)
+    end
+  end
+
+  defp replant_shipped(%Script{origin: "shipped"} = row, code, module, shipped) do
+    if row.code_hash in shipped, do: replant(row, code, module), else: {:ok, row}
+  end
+
+  defp replant_shipped(other, _code, _module, _shipped), do: {:ok, other}
+
+  defp replant(%Script{} = row, code, module) do
+    compiled = Compiler.compile(code)
+    Compiler.purge(module)
+
+    with {:ok, compiled} <- compiled,
+         :ok <- check_claims(compiled) do
+      land(row, attrs(compiled, code, :plant))
     end
   end
 
@@ -445,6 +526,10 @@ defmodule YmerNode.Scripts do
   The rest is the verb registry sync will need: stored code nobody here has
   looked at is compiled, and the acceptance refusals run as they do at any other
   door.
+
+  Not the two rules a new version is judged by — new code at the stored version,
+  a library version outside a dependent's requirement: accepting never changes
+  the stored code or its version.
   """
   def accept(name) when is_binary(name) do
     with {:ok, script} <- get(name) do
@@ -453,8 +538,8 @@ defmodule YmerNode.Scripts do
   end
 
   defp reaccept(%Script{} = script) do
-    with :ok <- check_reserved(script.name),
-         :ok <- check_idle(script.name) do
+    with :ok <- check_reserved(%{name: script.name, kind: kind(script)}),
+         :ok <- check_idle(%{name: script.name, kind: kind(script)}) do
       Loader.load(script.code, idle_guard: true, commit: &accept_stored(&1, script))
     end
   end
@@ -473,16 +558,26 @@ defmodule YmerNode.Scripts do
   Deletes a script and unloads its module tree, answering the row that went and
   the names of the schedules the database deleted with it.
 
-  Refuses while a run of that script is in flight, for the same reason
-  `update/2` does.
+  Refuses a script while a run of it is in flight, for the same reason
+  `update/2` does, and a library while any script declares it
+  (`library_in_use`, naming each one), running or not.
   """
   def remove(name) when is_binary(name) do
     with {:ok, script} <- get(name),
-         :ok <- check_idle(name),
+         :ok <- check_removable(script),
          {:ok, schedules} <- unload(script, fn -> delete_row(script) end) do
       {:ok, %{script: script, schedules: schedules}}
     end
   end
+
+  # A library with dependents is refused `library_in_use`, never with the
+  # in-flight look: a remove refused for a running dependent would say "retry",
+  # and the retry is always refused `library_in_use`. A library with none has
+  # no run to wait for. The loader's message checks both again.
+  defp check_removable(%Script{kind: "library", name: name}),
+    do: Libraries.check_removable(name, dependents(name))
+
+  defp check_removable(%Script{name: name}), do: check_idle(%{name: name, kind: :script})
 
   # Inside the loader's message, after the purge — it is `unload/3`'s commit —
   # so no write lands a fresh tree between the tree going and the row going. A
@@ -540,11 +635,11 @@ defmodule YmerNode.Scripts do
   # commit its message runs on the far side of the compile.
   defp write(code, door) do
     with {:ok, parsed} <- Compiler.parse(code),
-         :ok <- check_reserved(parsed.name),
+         :ok <- check_reserved(parsed),
          existing = Repo.get_by(Script, name: parsed.name),
-         :ok <- check_free(existing, door),
-         :ok <- check_same_module(existing, parsed.module),
-         :ok <- check_idle(parsed.name) do
+         :ok <- check_free(existing, parsed, door),
+         :ok <- check_same_module(existing, parsed),
+         :ok <- check_idle(parsed) do
       Loader.load(code, idle_guard: true, commit: &accept_and_store(&1, code, door))
     end
   end
@@ -570,16 +665,51 @@ defmodule YmerNode.Scripts do
   # removed; a replace meets a row whose module a concurrent create spelled
   # differently — each answered as the door would have answered it.
   defp store(compiled, code, door) do
-    with {:ok, existing} <- row_for(compiled.name, door),
-         :ok <- check_same_module(existing, compiled.module) do
+    with {:ok, existing} <- row_for(compiled, door),
+         :ok <- check_same_module(existing, compiled),
+         :ok <- check_new_version(existing, compiled, code),
+         :ok <- check_dependents(compiled) do
       land(existing, attrs(compiled, code, door))
     end
   end
 
-  defp row_for(name, door) do
+  # One version names one code on a node: new code for a row lands only under a
+  # version other than the stored one, a lower one included, which is how a
+  # rollback reads. The same code again is no new code, whatever its version.
+  defp check_new_version(nil, _compiled, _code), do: :ok
+
+  defp check_new_version(%Script{} = existing, compiled, code) do
+    if Script.hash(code) != existing.code_hash and existing.version == compiled.version do
+      {:error,
+       {:version_unchanged,
+        "#{existing.name} is already held at #{existing.version} with other code — new " <>
+          "code needs a new version: move version/0, to a lower one to roll back"}}
+    else
+      :ok
+    end
+  end
+
+  # A library's new version must stay inside what every script declaring it
+  # requires; read here, inside the loader's message, where no write can land a
+  # new dependent between this read and the row.
+  defp check_dependents(%{kind: :library, name: name, version: version}),
+    do: Libraries.check_in_range(name, version, dependents(name))
+
+  defp check_dependents(_script), do: :ok
+
+  defp dependents(library) do
+    rows = Repo.all(from script in Script.scripts(), select: {script.name, script.declarations})
+
+    Libraries.dependents(library, rows)
+  end
+
+  defp kind(%Script{kind: "library"}), do: :library
+  defp kind(%Script{}), do: :script
+
+  defp row_for(%{name: name} = compiled, door) do
     case {Repo.get_by(Script, name: name), door} do
       {nil, :update} -> {:error, not_found(name)}
-      {%Script{} = existing, :create} -> {:error, exists(existing)}
+      {%Script{} = existing, :create} -> {:error, exists(existing, compiled)}
       {existing, _door} -> {:ok, existing}
     end
   end
@@ -597,7 +727,9 @@ defmodule YmerNode.Scripts do
       accepted_hash: hash,
       accepted_at: now(),
       origin: origin(door),
+      kind: Atom.to_string(compiled.kind),
       contract: compiled.contract,
+      version: compiled.version,
       description: compiled.description,
       declarations: row_declarations(compiled.declarations)
     }
@@ -606,7 +738,9 @@ defmodule YmerNode.Scripts do
   # Atom keys in, string keys out: the column round-trips through JSON, so this
   # is the shape a re-read row has and the shape the references seam expects — a
   # throttle's parameters included, which is the shape the other accepted rows'
-  # throttles are compared in.
+  # throttles are compared in. A library declares nothing.
+  defp row_declarations(nil), do: %{}
+
   defp row_declarations(declarations) do
     %{
       "hosts" => declarations.hosts,
@@ -614,7 +748,8 @@ defmodule YmerNode.Scripts do
       "secrets" => declarations.secrets,
       "throttles" => row_throttles(declarations.throttles),
       "cache" => Atom.to_string(declarations.cache),
-      "web_fallback" => declarations.web_fallback
+      "web_fallback" => declarations.web_fallback,
+      "libraries" => declarations.libraries
     }
   end
 
@@ -633,8 +768,16 @@ defmodule YmerNode.Scripts do
   defp origin(:plant), do: "shipped"
   defp origin(_authored), do: "authored"
 
-  defp exists(%Script{name: name}) do
-    {:name_taken, "a script named #{name} already exists — update it instead of creating it"}
+  # Across kinds an update is refused as well — the two kinds share one name
+  # space — so the fix there is another name, never `update`.
+  defp exists(%Script{name: name, kind: kind} = existing, written) do
+    if kind(existing) == written.kind do
+      {:name_taken, "a #{kind} named #{name} already exists — update it instead of creating it"}
+    else
+      {:name_taken,
+       "a #{kind} named #{name} already exists, and scripts and libraries share one name " <>
+         "space — give this #{written.kind} another name"}
+    end
   end
 
   defp not_found(name), do: {:not_found, "no script named #{name}"}
@@ -647,8 +790,8 @@ defmodule YmerNode.Scripts do
   # keeps the same refusal for two concurrent creates, which both pass this look
   # and then queue on the loader — the second meets it there, deterministically,
   # and the loader puts the first's freshly stored code back.
-  defp check_free(%Script{} = existing, :create), do: {:error, exists(existing)}
-  defp check_free(_existing, _door), do: :ok
+  defp check_free(%Script{} = existing, written, :create), do: {:error, exists(existing, written)}
+  defp check_free(_existing, _written, _door), do: :ok
 
   # `Macro.underscore/1` is not injective — `Script.JiraApi` and `Script.JiraAPI`
   # both derive `jira_api` — so a replace whose top module is a different atom
@@ -657,26 +800,51 @@ defmodule YmerNode.Scripts do
   # the STORED code. Refused before the compile, the way a rename is — and once
   # more inside the loader's message (`store/3`), against the row as it stands
   # then, for the create that landed while this replace queued.
-  defp check_same_module(nil, _module), do: :ok
+  defp check_same_module(nil, _written), do: :ok
 
-  defp check_same_module(%Script{name: name, code: stored}, module) do
-    case Compiler.parse(stored) do
-      {:ok, %{module: ^module}} ->
-        :ok
+  # The kind first, from the row itself: code of the other kind would replace
+  # the row's only copy and flip it, and that is refused by kind whether or not
+  # the stored code still parses — never with the module text, whose "remove it
+  # and create it again" would delete a library with dependents.
+  defp check_same_module(
+         %Script{name: name, code: stored} = existing,
+         %{module: module} = written
+       ) do
+    with :ok <- check_same_kind(existing, written) do
+      case Compiler.parse(stored) do
+        {:ok, %{module: ^module}} ->
+          :ok
 
-      {:ok, %{module: other}} ->
-        {:error,
-         {:module_mismatch,
-          "#{name} is #{inspect(other)} and this code is #{inspect(module)} — two " <>
-            "modules spelling one name; remove #{name} and create it again to change " <>
-            "its module"}}
+        {:ok, %{module: other}} ->
+          {:error,
+           {:module_mismatch,
+            "#{name} is #{inspect(other)} and this code is #{inspect(module)} — two " <>
+              "modules spelling one name; remove #{name} and create it again to change " <>
+              "its module"}}
 
-      {:error, _unparseable} ->
-        :ok
+        # Stored code this node's parse refuses — a row written before a parse
+        # rule — names no module to compare; its kind was compared above.
+        {:error, _unparseable} ->
+          :ok
+      end
     end
   end
 
-  defp check_reserved(name) do
+  defp check_same_kind(%Script{name: name} = existing, %{kind: kind}) do
+    if kind(existing) == kind do
+      :ok
+    else
+      {:error,
+       {:module_mismatch,
+        "#{name} is a #{existing.kind} and this code is a #{kind} — scripts and " <>
+          "libraries share one name space, so give this #{kind} another name"}}
+    end
+  end
+
+  # A library is never a reference source, so only a script's name can shadow one.
+  defp check_reserved(%{kind: :library}), do: :ok
+
+  defp check_reserved(%{name: name}) do
     if name in Sources.builtin_sources() do
       {:error,
        {:reserved_name,
@@ -711,7 +879,9 @@ defmodule YmerNode.Scripts do
 
   # The rules that read the other accepted rows, in the order a refusal names
   # them: a claimed host first, then a second web fallback, then a throttle
-  # declared with other parameters.
+  # declared with other parameters. A library declares none of the three.
+  defp check_claims(%{kind: :library}), do: :ok
+
   defp check_claims(compiled) do
     with :ok <- check_hosts(compiled.name, compiled.declarations.hosts),
          :ok <- check_fallback(compiled.name, compiled.declarations.web_fallback) do
@@ -783,7 +953,21 @@ defmodule YmerNode.Scripts do
       "this code is #{derived}, not #{name} — remove #{name} and create #{derived} to rename it"}}
   end
 
-  defp check_idle(name) do
+  # A library never runs, so its early look is at the scripts declaring it: a
+  # write purges the library, and that kills a run inside its code. The look
+  # that holds is the loader's, in the message that purges.
+  defp check_idle(%{kind: :library, name: name}) do
+    case Enum.find(dependents(name), fn {script, _requirement} -> Runner.in_flight?(script) end) do
+      nil ->
+        :ok
+
+      {script, _requirement} ->
+        {reason, detail} = InFlight.refusal(script)
+        {:error, {reason, "#{name} is declared by #{script}, and #{detail}"}}
+    end
+  end
+
+  defp check_idle(%{name: name}) do
     if Runner.in_flight?(name) do
       {:error, InFlight.refusal(name)}
     else
@@ -798,14 +982,14 @@ defmodule YmerNode.Scripts do
   # message would let a queued write land a fresh tree in between. A row whose
   # code no longer parses has no tree this boot could have compiled: nothing to
   # purge, and the delete still lands inside the message.
-  defp unload(%Script{name: name, code: code}, commit) do
+  defp unload(%Script{name: name, code: code} = script, commit) do
     module =
       case Compiler.parse(code) do
         {:ok, %{module: module}} -> module
         {:error, _unparseable} -> nil
       end
 
-    Loader.unload(name, module, idle_guard: true, commit: commit)
+    Loader.unload(name, module, idle_guard: true, kind: kind(script), commit: commit)
   end
 
   # ─── Shaping a read ─────────────────────────────────────────────────
@@ -815,6 +999,8 @@ defmodule YmerNode.Scripts do
 
     %{
       name: script.name,
+      kind: script.kind,
+      version: script.version,
       description: script.description,
       origin: script.origin,
       accepted?: Script.accepted?(script),
@@ -837,6 +1023,37 @@ defmodule YmerNode.Scripts do
       warnings: facts.warnings,
       code: if(code?, do: script.code)
     })
+    |> Map.merge(related(script, facts))
+  end
+
+  # Either side of the graph: a library's API and the scripts declaring it, read
+  # as remove reads them; a script's libraries, each with the version this boot
+  # holds of it.
+  defp related(%Script{kind: "library", name: name}, facts) do
+    %{
+      api: facts.api || [],
+      dependents:
+        for(
+          {script, requirement} <- dependents(name),
+          do: %{name: script, requirement: requirement}
+        )
+    }
+  end
+
+  defp related(%Script{declarations: declarations}, _facts) do
+    libraries =
+      for {library, requirement} <- Enum.sort(Map.get(declarations, "libraries", %{})) do
+        %{name: library, requirement: requirement, version: held_version(library)}
+      end
+
+    %{libraries: libraries}
+  end
+
+  defp held_version(library) do
+    case Loader.facts(library) do
+      %{loaded?: true, kind: :library, version: version} -> version
+      _not_held -> nil
+    end
   end
 
   # A row nothing in this boot has compiled — no failure recorded either, because
@@ -845,6 +1062,7 @@ defmodule YmerNode.Scripts do
     %{
       loaded?: false,
       actions: %{},
+      api: nil,
       warnings: [],
       error: {:not_compiled, "not compiled this boot"}
     }

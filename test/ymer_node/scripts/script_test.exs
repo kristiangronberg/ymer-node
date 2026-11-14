@@ -21,7 +21,9 @@ defmodule YmerNode.Scripts.ScriptTest do
         accepted_hash: Script.hash(code),
         accepted_at: DateTime.utc_now() |> DateTime.truncate(:second),
         origin: "authored",
-        contract: 1,
+        kind: "script",
+        contract: 2,
+        version: "1.0.0",
         description: "a fixture",
         declarations: %{"hosts" => [], "url_action" => nil, "secrets" => []}
       },
@@ -63,9 +65,40 @@ defmodule YmerNode.Scripts.ScriptTest do
                code_hash: ["can't be blank"],
                origin: ["can't be blank"],
                contract: ["can't be blank"],
+               version: ["can't be blank"],
                description: ["can't be blank"],
                declarations: ["can't be blank"]
              } = errors_on(changeset)
+    end
+
+    test "is a script unless it says otherwise, and refuses a kind outside the two" do
+      assert {:ok, script} =
+               %Script{}
+               |> Script.changeset(Map.delete(attrs(%{}), :kind))
+               |> Repo.insert()
+
+      assert script.kind == "script"
+      assert Script.kinds() == ["script", "library"]
+
+      refused = Script.changeset(%Script{}, attrs(%{kind: "widget"}))
+      assert %{kind: ["is invalid"]} = errors_on(refused)
+    end
+
+    @tag doc: """
+         Every row written before libraries existed is a script, and the column's
+         default is what makes it one: a failure means a row stored before this
+         release reads with no kind, and every reader of the table misjudges it.
+         """
+    test "a row written without a kind column reads as a script with no version" do
+      now = DateTime.utc_now() |> DateTime.truncate(:second) |> DateTime.to_iso8601()
+
+      Repo.query!(
+        "INSERT INTO scripts (name, code, code_hash, origin, contract, description, " <>
+          "declarations, inserted_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        ["legacy", "x", Script.hash("x"), "authored", 1, "old", "{}", now, now]
+      )
+
+      assert %Script{kind: "script", version: nil} = Repo.get_by!(Script, name: "legacy")
     end
 
     test "does not require the acceptance pair, so an unaccepted row is writable" do

@@ -116,6 +116,7 @@ defmodule YmerNode.Repo.Migrations.PlantWebpageScriptTest do
           accepted_at: DateTime.utc_now() |> DateTime.truncate(:second),
           origin: origin,
           contract: YmerNode.Script.contract(),
+          version: "1.0.0",
           description: name,
           declarations: declarations
         })

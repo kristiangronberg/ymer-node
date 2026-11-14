@@ -128,6 +128,35 @@ defmodule YmerNode.Scripts.CLITest do
       assert {output, 1} = CLI.run(["scripts", "describe", "absent"])
       assert output =~ "no script named absent"
     end
+
+    test "lists a library with its version, and describes either side of the graph" do
+      library_segment = segment()
+      library = import_library!(library_segment)
+
+      script_segment = segment()
+      purge_on_exit(script_segment)
+
+      declared =
+        String.replace(
+          code(script_segment),
+          "secrets: []}",
+          ~s|secrets: [], libraries: %{"#{library.name}" => "~> 1.0"}}|
+        )
+
+      {:ok, script} = Scripts.import(declared)
+
+      assert {listed, 0} = CLI.run(["scripts", "list"])
+      assert listed =~ "#{library.name} 1.0.0"
+      assert listed =~ "library — scripts call it"
+
+      assert {output, 0} = CLI.run(["scripts", "describe", library.name])
+      assert output =~ "  library   origin: imported"
+      assert output =~ "    echo(value) — Answers what it is handed."
+      assert output =~ "    #{script.name} ~> 1.0"
+
+      assert {output, 0} = CLI.run(["scripts", "describe", script.name])
+      assert output =~ "    #{library.name} ~> 1.0 — holds 1.0.0"
+    end
   end
 
   describe "scripts export" do
@@ -704,6 +733,9 @@ defmodule YmerNode.Scripts.CLITest do
           def description, do: "reads a secret nobody set"
 
           @impl true
+          def version, do: "1.0.0"
+
+          @impl true
           def actions do
             %{read: %{description: "answers a missing secret", properties: %{}, write: false}}
           end
@@ -744,6 +776,28 @@ defmodule YmerNode.Scripts.CLITest do
     on_exit(fn -> Compiler.purge(Module.concat(["Script", segment])) end)
   end
 
+  defp import_library!(segment) do
+    on_exit(fn -> Compiler.purge(Module.concat(["Library", segment])) end)
+
+    {:ok, library} =
+      Scripts.import("""
+      defmodule Library.#{segment} do
+        use YmerNode.Library
+
+        @impl true
+        def description, do: "the #{segment} library"
+
+        @impl true
+        def version, do: "1.0.0"
+
+        @doc "Answers what it is handed."
+        def echo(value), do: value
+      end
+      """)
+
+    library
+  end
+
   defp import!(segment) do
     purge_on_exit(segment)
     {:ok, script} = Scripts.import(code(segment))
@@ -757,6 +811,9 @@ defmodule YmerNode.Scripts.CLITest do
 
       @impl true
       def description, do: "the #{segment} script"
+
+      @impl true
+      def version, do: "1.0.0"
 
       @impl true
       def actions do

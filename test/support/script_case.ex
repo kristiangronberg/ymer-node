@@ -32,6 +32,9 @@ defmodule YmerNode.ScriptCase do
     def description, do: "a fixture script"
 
     @impl true
+    def version, do: "1.0.0"
+
+    @impl true
     def actions, do: %{noop: %{description: "does nothing", properties: %{}, write: false}}
 
     @impl true
@@ -39,6 +42,17 @@ defmodule YmerNode.ScriptCase do
 
     @impl true
     def run(:noop, _args, _context), do: {:ok, %{}}
+  """
+
+  @default_library_body """
+    @impl true
+    def description, do: "a fixture library"
+
+    @impl true
+    def version, do: "1.0.0"
+
+    @doc "Answers what it is handed."
+    def echo(value), do: value
   """
 
   @doc """
@@ -58,6 +72,25 @@ defmodule YmerNode.ScriptCase do
       code: "defmodule Script.#{segment} do\n#{use_line}#{body}end\n",
       name: Macro.underscore(segment),
       module: Module.concat(["Script", segment])
+    }
+  end
+
+  @doc """
+  Code for one fixture library under a name unique to this case, with its
+  derived name and top module — `fixture/1`'s twin under `Library.`.
+
+  Pass a body to replace the default callbacks and its one documented function;
+  pass `use: false` to leave out the `use YmerNode.Library` line.
+  """
+  def library_fixture(options \\ []) do
+    body = Keyword.get(options, :body, @default_library_body)
+    segment = "Shared#{System.unique_integer([:positive])}"
+    use_line = if Keyword.get(options, :use, true), do: "  use YmerNode.Library\n\n", else: ""
+
+    %{
+      code: "defmodule Library.#{segment} do\n#{use_line}#{body}end\n",
+      name: Macro.underscore(segment),
+      module: Module.concat(["Library", segment])
     }
   end
 

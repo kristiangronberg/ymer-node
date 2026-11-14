@@ -11,7 +11,7 @@ defmodule YmerNode.Scripts.GuideTest do
   alias YmerNode.Scripts.PackageDocs
 
   describe "render/1" do
-    test "renders both modules, moduledoc first, entries in source order" do
+    test "renders each module, moduledoc first, entries in source order" do
       assert {:ok, text} = Guide.render()
 
       assert text =~ "# YmerNode.Script\n"
@@ -22,6 +22,7 @@ defmodule YmerNode.Scripts.GuideTest do
       assert text =~ "### request(context, options)"
 
       assert offset(text, "# YmerNode.Script\n") < offset(text, "# YmerNode.Script.Context\n")
+      assert offset(text, "# YmerNode.Script.Context\n") < offset(text, "# YmerNode.Library\n")
       assert offset(text, "### action/0") < offset(text, "## Callbacks")
 
       assert offset(text, "### request(context, options)") <

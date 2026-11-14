@@ -56,6 +56,7 @@ defmodule YmerNode.Schedules.ScheduleTest do
       accepted_hash: Script.hash(code),
       origin: "authored",
       contract: 1,
+      version: "1.0.0",
       description: "bare",
       declarations: %{"hosts" => []}
     })

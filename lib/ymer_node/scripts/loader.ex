@@ -84,13 +84,43 @@ defmodule YmerNode.Scripts.Loader do
   pay for it, and a failure would surface in a tool result rather than in the
   log an operator reads after a restart.
 
+  ## Libraries first, and a script only while its libraries are held
+
+  Boot compiles every library before any script, by name within each kind: a
+  script that `require`s or `import`s a library, or builds one of its structs,
+  does not compile until the library is loaded. Every compile of a script — at
+  boot, at a write, at a `check` and at a restore — is then checked against the
+  libraries this VM holds, read from the facts in the same message
+  (`YmerNode.Scripts.Libraries.check_held/3`): a library missing, Broken, or at
+  a version outside the script's requirement refuses the write, and at boot
+  keeps the script Broken with the same text, its tree purged. A script that
+  `require`s or `import`s such a library, or builds one of its structs, never
+  reaches that check: its own compile fails first, and the compiler's error is
+  what the refusal and the Broken row carry.
+
+  A library's write recompiles the library alone. A script that calls it needs
+  no recompile, because a call to a library function reaches the library by
+  module name when it is made; a macro, an `import`ed macro or a struct the
+  script took from the library stays as that script compiled it until the
+  script is stored again or the node restarts. Nor is a script kept Broken for
+  a library checked again when the library lands: it stays Broken until it is
+  stored again or the node restarts, which its refusal text says.
+
+  A library never runs, but the scripts declaring it do, and purging it kills a
+  run that is inside its code. So the guard a write and a `check` of a library
+  take looks at every script declaring it as well as at the library's name, and
+  refuses naming the dependent that is running. A remove of a library is refused
+  while any script declares it at all, before its tree is purged. The declaring
+  scripts are read from the rows in the same message as the purge.
+
   ## What it reads for itself
 
-  Two reads are this module's own, spelled with Ecto rather than through
+  Three reads are this module's own, spelled with Ecto rather than through
   `YmerNode.Scripts` — which calls *this* module on every write, so routing
   them through the context would make the pair mutually recursive at compile
   time for a query that is the same query either way: the accepted rows' name
-  and code at boot, and one row's code for a restore. Everything else this
+  and code at boot, one row's code for a restore, and the scripts declaring a
+  library for the guards on its write and its remove. Everything else this
   process touches in the database arrives as a write's `commit:` — the
   context's own functions, handed over as a value rather than called by name.
   """
@@ -101,6 +131,7 @@ defmodule YmerNode.Scripts.Loader do
   alias YmerNode.Repo
   alias YmerNode.Schedules.InFlight
   alias YmerNode.Scripts.Compiler
+  alias YmerNode.Scripts.Libraries
   alias YmerNode.Scripts.Script
 
   require Logger
@@ -166,8 +197,9 @@ defmodule YmerNode.Scripts.Loader do
   with it every script's facts, down for one write.
 
   `idle_guard: true` refuses with `{:error, {:run_in_flight, detail}}` while a
-  run of the script this code derives to is in flight — before anything is
-  purged, so that refusal alone restores nothing. Every production caller
+  run of the script this code derives to is in flight — or, for a library, a run
+  under the library's own name or of any script declaring it — before anything
+  is purged, so that refusal alone restores nothing. Every production caller
   passes it: `YmerNode.Scripts`' write and accept doors. The unguarded form is
   the test suite's, for a fixture compiled with no row and no run behind it.
   Boot never comes through here — `init/1` compiles the accepted rows through
@@ -182,8 +214,10 @@ defmodule YmerNode.Scripts.Loader do
   Unloads one script's module tree and forgets its facts.
 
   Takes `idle_guard: true` for the reason `load/2` does: a remove purges the
-  tree a run may be executing inside. Takes `commit:` for the reason `load/2`
-  does too: a remove's row delete runs inside this message, after the purge,
+  tree a run may be executing inside. Takes `kind: :library` for a library,
+  whose remove is refused with `{:error, {:library_in_use, detail}}` while any
+  script declares it, before anything is purged. Takes `commit:` for the reason
+  `load/2` does too: a remove's row delete runs inside this message, after the purge,
   so no write can land a fresh tree between the tree going and the row going —
   `fun.()` answers `{:ok, value}` or `{:error, reason}`, and that is this
   call's answer once the tree is gone and the name forgotten, whichever it
@@ -194,10 +228,11 @@ defmodule YmerNode.Scripts.Loader do
   def unload(name, top_module, opts \\ [])
       when is_binary(name) and is_atom(top_module) and is_list(opts) do
     commit = Keyword.get(opts, :commit, fn -> :ok end)
+    kind = Keyword.get(opts, :kind, :script)
 
     GenServer.call(
       __MODULE__,
-      {:unload, name, top_module, guarded?(opts), commit},
+      {:unload, name, top_module, kind, guarded?(opts), commit},
       @call_timeout
     )
   end
@@ -226,9 +261,10 @@ defmodule YmerNode.Scripts.Loader do
   What this VM knows about one script right now — `nil` for a script this boot
   has never compiled.
 
-  `%{loaded?: boolean, module: module | nil, modules: [module], contract: integer | nil,
+  `%{loaded?: boolean, kind: :script | :library | nil, module: module | nil,
+  modules: [module], contract: integer | nil, version: String.t() | nil,
   description: String.t() | nil, actions: map, declarations: map | nil,
-  warnings: [String.t()], error: nil | {atom, String.t()}}`.
+  api: [map] | nil, warnings: [String.t()], error: nil | {atom, String.t()}}`.
 
   Every key is present either way: a script that would not compile answers the
   same shape with `loaded?: false`, no module, no metadata and its `error` set,
@@ -274,14 +310,13 @@ defmodule YmerNode.Scripts.Loader do
 
   # The purge and the forget stand whatever the commit answers: a row the
   # commit finds already gone has no tree to keep either.
-  def handle_call({:unload, name, top_module, guard?, commit}, _from, state) do
-    case idle_name(name, guard?) do
-      :ok ->
-        if top_module, do: Compiler.purge(top_module)
-        {:reply, committed(commit), %{state | scripts: Map.delete(state.scripts, name)}}
-
-      {:error, reason} ->
-        {:reply, {:error, reason}, state}
+  def handle_call({:unload, name, top_module, kind, guard?, commit}, _from, state) do
+    with :ok <- idle_name(name, guard?),
+         :ok <- removable(name, kind) do
+      if top_module, do: Compiler.purge(top_module)
+      {:reply, committed(commit), %{state | scripts: Map.delete(state.scripts, name)}}
+    else
+      {:error, reason} -> {:reply, {:error, reason}, state}
     end
   end
 
@@ -309,10 +344,10 @@ defmodule YmerNode.Scripts.Loader do
   # candidate's compile has purged the stored tree, and every outcome but a
   # kept candidate — a compile that fails, a commit that refuses — ends in the
   # restore, inside this same message.
-  defp load_reply(state, code, %{name: name, module: module}, guard?, commit) do
-    case idle_name(name, guard?) do
+  defp load_reply(state, code, %{name: name, module: module} = parsed, guard?, commit) do
+    case idle(parsed, guard?) do
       :ok ->
-        case compile_and_commit(code, commit) do
+        case compile_and_commit(code, state, commit) do
           {:ok, compiled, value} -> {:reply, {:ok, value}, record_success(state, compiled)}
           {:error, reason} -> {:reply, {:error, reason}, restore(state, name, module)}
         end
@@ -323,8 +358,8 @@ defmodule YmerNode.Scripts.Loader do
   end
 
   # `compiled` is what the facts record; `value` is what the caller is told.
-  defp compile_and_commit(code, commit) do
-    with {:ok, compiled} <- Compiler.compile(code),
+  defp compile_and_commit(code, state, commit) do
+    with {:ok, compiled} <- compile_held(code, state),
          {:ok, value} <- committed(fn -> commit.(compiled) end) do
       {:ok, compiled, value}
     end
@@ -344,10 +379,10 @@ defmodule YmerNode.Scripts.Loader do
   # The candidate's result is taken first and the restore runs after it, in this
   # order and named so, rather than left to the order a tuple's elements happen
   # to be evaluated in.
-  defp check_reply(state, code, %{name: name, module: module}) do
-    case idle_name(name, true) do
+  defp check_reply(state, code, %{name: name, module: module} = parsed) do
+    case idle(parsed, true) do
       :ok ->
-        result = Compiler.compile(code)
+        result = compile_held(code, state)
         {:reply, result, restore(state, name, module)}
 
       {:error, reason} ->
@@ -375,11 +410,32 @@ defmodule YmerNode.Scripts.Loader do
   end
 
   defp reload(state, name, code) do
-    case Compiler.compile(code) do
+    case compile_held(code, state) do
       {:ok, compiled} -> record_success(state, compiled)
-      {:error, reason} -> record_failure(state, name, reason)
+      {:error, reason} -> record_failure(state, name, reason, code)
     end
   end
+
+  # A script is kept only while every library it declares is held by this VM,
+  # read from the facts in this same message; one that is not is purged as a
+  # failed compile is, so the tree never outlives the refusal.
+  defp compile_held(code, state) do
+    with {:ok, compiled} <- Compiler.compile(code) do
+      case held(compiled, state) do
+        :ok ->
+          {:ok, compiled}
+
+        {:error, reason} ->
+          Compiler.purge(compiled.module)
+          {:error, reason}
+      end
+    end
+  end
+
+  defp held(%{kind: :script} = compiled, state),
+    do: Libraries.check_held(compiled.name, compiled.declarations.libraries, state.scripts)
+
+  defp held(_library, _state), do: :ok
 
   # A read that fails is not "no row": that answer would forget a script whose
   # row may well exist. The purge has already run, so the truthful facts are a
@@ -399,14 +455,60 @@ defmodule YmerNode.Scripts.Loader do
   end
 
   # The name a guard needs comes from a parse, which runs none of the script's
-  # own code and is the same walk the compile does first.
+  # own code and is the same walk the compile does first. A library's guard
+  # covers its own name, as every write's does, and every script declaring it,
+  # because a purge of the library kills a run that is inside its code.
+  defp idle(_parsed, false), do: :ok
+
+  defp idle(%{kind: :library, name: name}, true) do
+    with :ok <- idle_name(name, true),
+         {:ok, dependents} <- dependents(name) do
+      dependents
+      |> Enum.find(fn {script, _requirement} -> running?(script) end)
+      |> dependent_idle(name)
+    end
+  end
+
+  defp idle(%{name: name}, true), do: idle_name(name, true)
+
+  defp dependent_idle(nil, _library), do: :ok
+
+  defp dependent_idle({script, _requirement}, library),
+    do: {:error, dependent_refusal(library, script)}
+
+  defp dependent_refusal(library, script) do
+    {reason, detail} = InFlight.refusal(script)
+    {reason, "#{library} is declared by #{script}, and #{detail}"}
+  end
+
+  defp running?(name), do: Registry.lookup(@registry, name) != []
+
+  defp removable(name, :library) do
+    with {:ok, dependents} <- dependents(name), do: Libraries.check_removable(name, dependents)
+  end
+
+  defp removable(_name, :script), do: :ok
+
+  # A read that fails refuses the write rather than guessing there is nobody to
+  # protect: the stored code is untouched, so the same call can be retried.
+  defp dependents(library) do
+    rows = Repo.all(from script in Script.scripts(), select: {script.name, script.declarations})
+
+    {:ok, Libraries.dependents(library, rows)}
+  rescue
+    exception ->
+      {:error,
+       {:commit_failed,
+        "could not read the scripts declaring #{library}: #{Exception.message(exception)}"}}
+  end
+
   defp idle_name(_name, false), do: :ok
 
   defp idle_name(name, true) do
-    if Registry.lookup(@registry, name) == [] do
-      :ok
-    else
+    if running?(name) do
       {:error, InFlight.refusal(name)}
+    else
+      :ok
     end
   end
 
@@ -414,11 +516,13 @@ defmodule YmerNode.Scripts.Loader do
     Enum.reduce(accepted_rows(), {%{loaded: 0, refused: 0}, state}, &compile_row/2)
   end
 
+  # Libraries first — `"library"` sorts before `"script"` — so every script's
+  # compile meets the libraries it declares already loaded.
   defp accepted_rows do
     Repo.all(
       from script in Script.accepted(),
         select: {script.name, script.code},
-        order_by: script.name
+        order_by: [asc: script.kind, asc: script.name]
     )
   rescue
     exception ->
@@ -430,13 +534,15 @@ defmodule YmerNode.Scripts.Loader do
   # would take the notebook and the registry down over one script, and leave the
   # operator no way in to fix it.
   defp compile_row({name, code}, {counts, state}) do
-    case Compiler.compile(code) do
+    case compile_held(code, state) do
       {:ok, compiled} ->
         {Map.update!(counts, :loaded, &(&1 + 1)), record_success(state, compiled)}
 
       {:error, {reason, detail}} ->
         Logger.error("scripts: #{name} did not compile at boot (#{reason}): #{detail}")
-        {Map.update!(counts, :refused, &(&1 + 1)), record_failure(state, name, {reason, detail})}
+
+        {Map.update!(counts, :refused, &(&1 + 1)),
+         record_failure(state, name, {reason, detail}, code)}
     end
   end
 
@@ -448,12 +554,15 @@ defmodule YmerNode.Scripts.Loader do
   defp record_success(state, compiled) do
     facts = %{
       loaded?: true,
+      kind: compiled.kind,
       module: compiled.module,
       modules: compiled.modules,
       contract: compiled.contract,
+      version: compiled.version,
       description: compiled.description,
       actions: compiled.actions,
       declarations: compiled.declarations,
+      api: compiled.api,
       warnings: compiled.warnings,
       error: nil
     }
@@ -461,19 +570,33 @@ defmodule YmerNode.Scripts.Loader do
     put_in(state.scripts[compiled.name], facts)
   end
 
-  defp record_failure(state, name, error) do
+  # The kind is the parse's, where the code still parses: a script declaring
+  # this row as a library is then told it is a script, not that it is Broken.
+  defp record_failure(state, name, error, code \\ nil) do
     facts = %{
       loaded?: false,
+      kind: failed_kind(code),
       module: nil,
       modules: [],
       contract: nil,
+      version: nil,
       description: nil,
       actions: %{},
       declarations: nil,
+      api: nil,
       warnings: [],
       error: error
     }
 
     put_in(state.scripts[name], facts)
   end
+
+  defp failed_kind(code) when is_binary(code) do
+    case Compiler.parse(code) do
+      {:ok, %{kind: kind}} -> kind
+      {:error, _unparseable} -> nil
+    end
+  end
+
+  defp failed_kind(nil), do: nil
 end

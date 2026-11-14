@@ -280,6 +280,9 @@ defmodule YmerNode.Schedules.WatchTest do
       def description, do: "answers watch.example.test pages"
 
       @impl true
+      def version, do: "1.0.0"
+
+      @impl true
       def actions do
         %{
           fetch: %{

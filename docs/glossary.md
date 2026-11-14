@@ -166,6 +166,12 @@ _Avoid_: headed browser, profile window, workbench, session
 
 ## L
 
+### library
+`YmerNode.Library`
+_Avoid_: shared script, helper module, module (bare), package, dependency (for
+it); *standard library* stays compound-qualified, and a hex package is a
+*package*
+
 ### lifetime
 How far into the future a schedule keeps firing — an end the node sets at `add`
 or `update`, never more than 90 days ahead; past it the schedule is expired.
@@ -288,6 +294,10 @@ _Avoid_: index, knowledge index, catalog, reference layer. A **process
 registry** — Elixir's `Registry`, or the name a supervised process is
 registered under — stays compound-qualified wherever it is meant.
 
+### requirement
+Defined by Elixir's `Version` (its requirement); its definition lives there, not
+here. A script states one for each library it declares.
+
 ### run
 `YmerNode.Scripts.Runner`
 _Avoid_: job
@@ -310,7 +320,9 @@ _Avoid_: scheduling (bare), trigger, job, timer, cron (for the schedule — the
 field is its cron expression)
 
 ### script
-`YmerNode.Scripts.Script`
+`YmerNode.Scripts.Script` — the runnable kind of row, beside the
+[*library*](#library); a row is a script or a library, and the `scripts` tool,
+the CLI's noun and the table keep the name for the collection.
 _Avoid_: extension, plugin, program, integration (as the thing); tool (a script
 is served by the `scripts` tool, it is not one)
 
@@ -387,6 +399,14 @@ _Avoid_: thread list, inbox
 ### throttle
 `t:YmerNode.Script.throttle/0`
 _Avoid_: gate, rate limiter, limiter, rate limit (the class, never the thing)
+
+## V
+
+### version
+`c:YmerNode.Script.version/0`, and its twin `c:YmerNode.Library.version/0`
+*Contract version* (what `use` stamps), *release version* (ymer-node's own) and
+*package version* stay compound-qualified.
+_Avoid_: revision, release, tag (for it)
 
 ## W
 

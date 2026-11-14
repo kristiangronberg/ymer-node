@@ -1,13 +1,15 @@
 defmodule YmerNode.Scripts.Guide do
   @moduledoc """
-  The text `scripts guide` renders — the script contract and the batteries a
-  script is handed — read at the call from the docs the release keeps.
+  The text `scripts guide` renders — the script contract, the batteries a
+  script is handed and the library contract — read at the call from the docs
+  the release keeps.
 
   ## One home
 
-  What a script must implement and what it is handed are written once, as the
-  moduledocs of `YmerNode.Script` and `YmerNode.Script.Context` and the docs
-  beneath them, and this module renders those bytes: a client reading the guide
+  What a script must implement, what it is handed and what a library it calls
+  implements are written once, as the moduledocs of `YmerNode.Script`,
+  `YmerNode.Script.Context` and `YmerNode.Library` and the docs beneath them,
+  and this module renders those bytes: a client reading the guide
   and a developer reading the published docs read the same text, and a contract
   change moves one text. `Code.fetch_docs/1` is the reader, which is why the
   release carrying `ymer_node` must keep the BEAM `Docs` chunk that
@@ -41,15 +43,17 @@ defmodule YmerNode.Scripts.Guide do
   signature. Hidden docs (`@doc false`) and undocumented entries are left out,
   as the published docs leave them out.
   """
+  alias YmerNode.Library
   alias YmerNode.Script
 
-  @modules [Script, Script.Context]
+  @modules [Script, Script.Context, Library]
 
   @kinds [type: "Types", callback: "Callbacks", function: "Functions"]
 
   @doc """
-  Renders the guide over `modules` — the two contract modules by default — and
-  ends it with the applications the running node has loaded.
+  Renders the guide over `modules` — the script contract, the context and the
+  library contract by default — and ends it with the applications the running
+  node has loaded.
 
   Answers `{:ok, markdown}`, or `{:error, {:docs_missing, detail}}` naming the
   first module whose docs this build does not carry.

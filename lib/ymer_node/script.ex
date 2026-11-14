@@ -1,8 +1,8 @@
 defmodule YmerNode.Script do
   @moduledoc """
-  The contract a script implements — its description, its actions and their
-  read/write marks, its declarations — and the version `use YmerNode.Script`
-  stamps into its row.
+  The contract a script implements — its description, its version, its actions
+  and their read/write marks, its declarations — and the contract version
+  `use YmerNode.Script` stamps into its row.
 
   ## It mirrors `Wymcp.Tool` on purpose
 
@@ -20,15 +20,21 @@ defmodule YmerNode.Script do
   function, or an attribute registered with `persist: true`, survives. Callbacks
   are the readable surface, so they are the whole contract; `use` adds one more
   generated function, `__script_contract__/0`, which is how a row records the
-  version it was written against.
+  contract version it was written against. The author's own version is a
+  callback for the same reason, `version/0`: it travels in the code, so an
+  export carries it and the receiving node reads the same number.
 
-  ## The version
+  ## The contract version
 
-  `use YmerNode.Script` stamps `contract/0`'s value into the row at write. A row
-  whose contract this node does not speak is refused — at write, and after an
-  upgrade at boot — with a message naming both versions. There is one version
-  today; the mechanism exists so the second one is a refusal an operator can
-  read rather than a crash inside a callback that moved.
+  `use YmerNode.Script` stamps `contract/0`'s value into the row at write. The
+  stamp is the compiling node's own number — `use` is this node's macro — so it
+  never differs from `contract/0` and guards neither direction across node
+  versions: a contract change is caught by what the new contract requires, the
+  way a missing callback is. Contract 2 added
+  `version/0` and refuses a declarations key the node does not read. A row
+  written before it compiles at boot against the node's own `use`, so it is kept
+  Broken for the callback it lacks, and the refusal names the fix: add
+  `version/0`, then `update` the script or import it again.
 
   ## Writing one
 
@@ -37,6 +43,9 @@ defmodule YmerNode.Script do
 
         @impl true
         def description, do: "Reads package metadata from hex.pm."
+
+        @impl true
+        def version, do: "1.0.0"
 
         @impl true
         def actions do
@@ -207,9 +216,11 @@ defmodule YmerNode.Script do
   `script_author check`, then `create` — acceptance is that node's own act,
   by whoever creates it there — and the person there sets whatever secrets
   `declarations/0` names. There is no second format: the module is the whole
-  of it.
+  of it. A script that declares libraries needs them first: each library is
+  shared the same way, and imported before the scripts that call it, or the
+  script is refused for the library it is missing (`YmerNode.Library`).
   """
-  @contract 1
+  @contract 2
 
   @typedoc """
   One action's schema: wymcp's shape — `description` and `properties` mandatory,
@@ -233,7 +244,7 @@ defmodule YmerNode.Script do
   A script's claims and needs the node acts on: the http(s) hosts it claims for
   references with its one URL-accepting action, the secrets it resolves by name,
   the throttles it names with their parameters, how the cache stores what its
-  URL action answers, and whether it is the web fallback.
+  URL action answers, whether it is the web fallback, and the libraries it calls.
 
   `hosts` are the hosts a reference is classified by — the exact host of a
   browsable link, which is often not the host the script calls (a script
@@ -252,8 +263,18 @@ defmodule YmerNode.Script do
   serves every http(s) reference no exact host claim takes. It claims no host
   by it, and acceptance refuses a second.
 
-  The map is keyed and open by design: a non-http scheme claim is a later key,
-  and a script written today keeps working when one arrives.
+  `libraries` maps the name of each library the script calls — its name as
+  `list` shows it, `"crosskey"` for `Library.Crosskey` — to a requirement on the
+  library's version, written as `Version` reads one: `%{"crosskey" => "~> 1.0"}`.
+  Every entry states one, and `">= 0.0.0"` accepts any version. Acceptance
+  refuses a script whose libraries this node does not hold in range, and the
+  compiler refuses one whose code names a `Library.` module it does not declare
+  here (`YmerNode.Library`).
+
+  The map is keyed, and a key this node does not read is refused by name: a node
+  that dropped it would run a script written for a newer node without what the
+  key asked for. A script that names only the keys an older node reads still
+  works on a newer one.
   """
   @type declarations :: %{
           required(:hosts) => [String.t()],
@@ -261,7 +282,8 @@ defmodule YmerNode.Script do
           required(:secrets) => [String.t()],
           optional(:throttles) => %{String.t() => throttle()},
           optional(:cache) => :text | :file,
-          optional(:web_fallback) => boolean()
+          optional(:web_fallback) => boolean(),
+          optional(:libraries) => %{String.t() => String.t()}
         }
 
   @typedoc """
@@ -291,6 +313,18 @@ defmodule YmerNode.Script do
 
   @doc "One line a worker reads before choosing this script."
   @callback description() :: String.t()
+
+  @doc """
+  The author's version of this code, a `Version` string; on a node one version
+  always names one code.
+
+  `"1.2.0"`, written by whoever writes the code and moved when the code moves:
+  `update` and `scripts import` refuse new code at the version already stored,
+  so the number a list or a `describe` shows always says which code is there.
+  It is the script's own number, not the node's contract version and not a
+  release of ymer-node.
+  """
+  @callback version() :: String.t()
 
   @doc "Every action the script serves, keyed by its atom name."
   @callback actions() :: %{atom() => action()}
@@ -322,8 +356,8 @@ defmodule YmerNode.Script do
   end
 
   @doc """
-  The contract version this node speaks. A row stamped with any other is refused
-  with both versions named.
+  The contract version this node speaks, which `use` stamps into every script
+  this node compiles.
   """
   def contract, do: @contract
 
@@ -334,5 +368,6 @@ defmodule YmerNode.Script do
   missing callback is a *warning* and the module still loads, so the node checks
   exports itself and refuses. `YmerNode.Scripts.Compiler` is the caller.
   """
-  def callbacks, do: [{:description, 0}, {:actions, 0}, {:declarations, 0}, {:run, 3}]
+  def callbacks,
+    do: [{:description, 0}, {:version, 0}, {:actions, 0}, {:declarations, 0}, {:run, 3}]
 end

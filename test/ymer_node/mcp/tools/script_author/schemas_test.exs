@@ -62,7 +62,11 @@ defmodule YmerNode.Mcp.Tools.ScriptAuthor.SchemasTest do
 
   test "every acceptance door states what acceptance refuses" do
     for action <- [:create, :update, :accept] do
-      assert Schemas.all()[action].notes =~ "Acceptance refuses six things"
+      notes = Schemas.all()[action].notes
+
+      assert notes =~ "Acceptance refuses:"
+      assert notes =~ "a declared library this node does not hold"
+      assert notes =~ "a version/0 the stored row already holds"
     end
   end
 
@@ -78,11 +82,18 @@ defmodule YmerNode.Mcp.Tools.ScriptAuthor.SchemasTest do
     assert notes =~ "Whole replacement"
     assert notes =~ "no version history"
     assert notes =~ "SAME name"
+    assert notes =~ "new code needs one other than the stored one"
     assert notes =~ "in flight"
   end
 
   test "remove says the code is not kept and that references fall back" do
     assert Schemas.all().remove.notes =~ "not kept anywhere"
     assert Schemas.all().remove.notes =~ "falls back"
+    assert Schemas.all().remove.notes =~ "A library any script declares is refused"
+  end
+
+  test "the script argument names a library as well" do
+    assert Schemas.all().update.properties["script"]["description"] =~
+             ~s|`Library.Crosskey` is "crosskey"|
   end
 end

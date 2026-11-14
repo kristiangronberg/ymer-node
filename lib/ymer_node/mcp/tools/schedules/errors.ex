@@ -38,8 +38,15 @@ defmodule YmerNode.Mcp.Tools.Schedules.Errors do
       "#{detail}. Accept it with `script_author accept`, or from the machine itself " <>
         "with `#{CLI.instruction("scripts accept")}`."
 
+  def message({:not_runnable, detail}, _ctx),
+    do: "#{detail}. `scripts list` shows which names are scripts."
+
   def message({:not_loaded, detail}, _ctx),
     do: "#{detail}. `scripts describe` shows why it will not run."
+
+  def message({reason, detail}, _ctx)
+      when reason in [:library_missing, :library_broken, :library_out_of_range],
+      do: "#{detail}. `scripts describe` shows the libraries the script declares."
 
   def message({:unknown_action, detail}, _ctx),
     do: "#{detail}. `scripts describe` lists the script's actions."

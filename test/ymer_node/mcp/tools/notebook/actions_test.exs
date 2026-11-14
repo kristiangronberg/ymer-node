@@ -23,6 +23,29 @@ defmodule YmerNode.Mcp.Tools.Notebook.ActionsTest do
                Actions.run(:query, %{"sql" => "SELECT id, v FROM t"})
     end
 
+    test "execute and query bind params, and a value that does not bind runs nothing" do
+      {:ok, _, _} =
+        Actions.run(:execute, %{"sql" => "CREATE TABLE t (id INTEGER PRIMARY KEY, v TEXT)"})
+
+      assert {:ok, %{affected_rows: 1}, _} =
+               Actions.run(:execute, %{
+                 "sql" => "INSERT INTO t (v) VALUES (?1)",
+                 "params" => ["it's"]
+               })
+
+      assert {:ok, %{rows: [["it's"]]}, _} =
+               Actions.run(:query, %{"sql" => "SELECT v FROM t WHERE v = ?", "params" => ["it's"]})
+
+      assert {:error, {{:invalid_param, _detail}, %{action_verb: "execute SQL"}}} =
+               Actions.run(:execute, %{
+                 "sql" => "INSERT INTO t (v) VALUES (?)",
+                 "params" => [[{}]]
+               })
+
+      assert {:error, {{:wrong_type, %{key: "params", got: "x"}}, %{action_verb: "run query"}}} =
+               Actions.run(:query, %{"sql" => "SELECT ?", "params" => "x"})
+    end
+
     test "query rejects a write with a helpful error tuple" do
       assert {:error, {:not_read_only, _ctx}} =
                Actions.run(:query, %{"sql" => "DELETE FROM sqlite_master"})

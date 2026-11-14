@@ -92,7 +92,8 @@ defmodule Script.WebpageTest do
                secrets: [],
                throttles: %{},
                cache: :text,
-               web_fallback: true
+               web_fallback: true,
+               libraries: %{}
              }
 
       refute compiled.actions.fetch.write

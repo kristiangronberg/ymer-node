@@ -147,6 +147,9 @@ defmodule YmerNode.Mcp.Tools.Schedules.ActionsTest do
       def description, do: "the #{segment} script"
 
       @impl true
+      def version, do: "1.0.0"
+
+      @impl true
       def actions do
         %{
           fetch: %{

@@ -105,7 +105,7 @@ defmodule YmerNode.References.Sources do
   """
   def declarations do
     query =
-      from script in Script.accepted(),
+      from script in Script.scripts(Script.accepted()),
         order_by: [asc: script.name],
         select: {script.name, script.declarations}
 

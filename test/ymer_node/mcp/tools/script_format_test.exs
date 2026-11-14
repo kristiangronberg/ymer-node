@@ -49,6 +49,13 @@ defmodule YmerNode.Mcp.Tools.ScriptFormatTest do
              }
     end
 
+    test "carries a row's kind and version" do
+      rendered = ScriptFormat.summary(Map.merge(@entry, %{kind: "library", version: "1.2.0"}))
+
+      assert rendered.kind == "library"
+      assert rendered.version == "1.2.0"
+    end
+
     test "renders a script that will not run, with the reason it will not" do
       failure = {:syntax_error, "script:hex:3: oops"}
       broken = %{@entry | loaded?: false, actions: [], error: failure}
@@ -137,6 +144,38 @@ defmodule YmerNode.Mcp.Tools.ScriptFormatTest do
 
       assert detail.code == "defmodule Script.Hex do\nend\n"
       assert detail.warnings == ["script:hex:9:3: unused variable"]
+    end
+
+    test "carries a script's libraries, and a library's API and dependents" do
+      base =
+        Map.merge(@entry, %{
+          contract: 2,
+          accepted_at: nil,
+          declarations: %{},
+          warnings: [],
+          code: nil
+        })
+
+      libraries = [%{name: "crosskey", requirement: "~> 1.0", version: "1.2.0"}]
+
+      script = ScriptFormat.detail(Map.merge(base, %{actions: @schemas, libraries: libraries}))
+      assert script.libraries == libraries
+
+      api = [
+        %{name: "Library.Crosskey.account/1", signature: "account(context)", doc: "Options."}
+      ]
+
+      dependents = [%{name: "jira", requirement: "~> 1.0"}]
+
+      library =
+        ScriptFormat.detail(
+          Map.merge(base, %{kind: "library", actions: %{}, api: api, dependents: dependents})
+        )
+
+      assert library.kind == "library"
+      assert library.api == api
+      assert library.dependents == dependents
+      assert library.actions == %{}
     end
   end
 

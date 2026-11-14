@@ -7,6 +7,9 @@ defmodule Script.Throttled do
   def description, do: "reads one value through a throttle, signing in with a secret"
 
   @impl true
+  def version, do: "1.0.0"
+
+  @impl true
   def actions, do: %{get: %{description: "reads the value", properties: %{}, write: false}}
 
   @impl true

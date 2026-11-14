@@ -153,6 +153,7 @@ defmodule YmerNode.Repo.Migrations.PlantExampleScriptTest do
           accepted_at: DateTime.utc_now() |> DateTime.truncate(:second),
           origin: origin,
           contract: YmerNode.Script.contract(),
+          version: "1.0.0",
           description: name,
           declarations: %{"hosts" => hosts, "url_action" => "fetch", "secrets" => []}
         })

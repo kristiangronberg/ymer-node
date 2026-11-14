@@ -11,10 +11,12 @@ defmodule YmerNode.Mcp.Tools.Scripts.Errors do
   chunk, a package name outside the promise — and the wrong-typed twins the
   action layer raises. It is
   deliberately **not** shared with `YmerNode.Mcp.Tools.ScriptAuthor.Errors`:
-  nothing the compiler or acceptance refuses can reach this tool, because this
-  tool compiles nothing and accepts nothing — the runner flattens the one compile
-  failure it can see into the text of `:not_loaded`. A shared module would be a
-  union neither tool fully uses.
+  this tool compiles nothing and accepts nothing, so the runner flattens the one
+  compile failure it can see into the text of `:not_loaded`. The one overlap is
+  the three library reasons a run answers when a declared library is no longer
+  held, and their fix differs at a run — the script runs again once the library
+  is held, never stored again — so each tool renders them itself. A shared module
+  would be a union neither tool fully uses.
   """
 
   alias YmerNode.Scripts.CLI
@@ -23,6 +25,8 @@ defmodule YmerNode.Mcp.Tools.Scripts.Errors do
 
   def message({:not_found, detail}, _ctx),
     do: "#{detail}. Call `list` to see what this node holds."
+
+  def message({:not_runnable, detail}, _ctx), do: detail <> "."
 
   def message({:not_accepted, detail}, _ctx),
     do:
@@ -33,6 +37,12 @@ defmodule YmerNode.Mcp.Tools.Scripts.Errors do
     do:
       "#{detail}. The script is stored but this node could not compile it — " <>
         "`describe` shows the diagnostics, and `script_author update` is the fix."
+
+  # The script compiled; a library it declares is what is missing, and the
+  # detail already names that library and the fix.
+  def message({reason, detail}, _ctx)
+      when reason in [:library_missing, :library_broken, :library_out_of_range],
+      do: "#{detail}. `describe` shows the libraries this script declares."
 
   def message({:unknown_action, detail}, _ctx),
     do: "#{detail}. Call `describe` for this script's actions and their arguments."

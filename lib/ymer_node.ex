@@ -173,9 +173,14 @@ defmodule YmerNode do
   read what they are landing. A fourth, registry sync, is why the unaccepted
   state exists at all before any door can produce it.
 
-  `YmerNode.Scripts.Script` is the row: the code, the two hashes, and the
-  description and declarations denormalised from the compiled module so a listing
-  and the references seam are one query each. `YmerNode.Scripts.Compiler` turns
+  `YmerNode.Scripts.Script` is the row, a script or a library: the code, the two
+  hashes, and the kind, version, description and declarations denormalised from
+  the compiled module so a listing and the references seam are one query each.
+  `YmerNode.Library` is the contract a library implements — shared code a script
+  declares and calls, accepted like a script and never run — and
+  `YmerNode.Scripts.Libraries` holds the rules that keep the graph between them
+  true: a script runs only while the libraries it declares are held in range,
+  and a library is not removed or moved out of range while a script declares it. `YmerNode.Scripts.Compiler` turns
   code into modules and refuses, before compiling anything, a module it can see
   defined outside `Script.` — a guard against the honest mistake, not a second
   boundary, because a module body runs while it compiles and the door that

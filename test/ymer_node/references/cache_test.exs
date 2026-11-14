@@ -482,6 +482,9 @@ defmodule YmerNode.References.CacheTest do
       def description, do: "answers #{host} pages for the cache"
 
       @impl true
+      def version, do: "1.0.0"
+
+      @impl true
       def actions do
         %{
           fetch: %{

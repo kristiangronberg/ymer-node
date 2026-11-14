@@ -72,7 +72,7 @@ defmodule Script.HexTest do
     test "compiles under the node's own compiler, deriving the name hex", %{compiled: compiled} do
       assert compiled.name == "hex"
       assert compiled.module == Module.concat(["Script", "Hex"])
-      assert compiled.contract == 1
+      assert compiled.contract == 2
       assert compiled.warnings == []
     end
 
@@ -83,7 +83,8 @@ defmodule Script.HexTest do
                secrets: [],
                throttles: %{},
                cache: :text,
-               web_fallback: false
+               web_fallback: false,
+               libraries: %{}
              }
 
       assert Map.has_key?(compiled.actions.fetch.properties, "url")

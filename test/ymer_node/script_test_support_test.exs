@@ -226,6 +226,96 @@ defmodule YmerNode.ScriptTestSupportTest do
         ScriptTest.compile_script(file)
       end
     end
+
+    test "a file refused after its tree loaded leaves no module behind", %{tmp_dir: tmp_dir} do
+      %{module: module} =
+        fixture = ScriptCase.fixture(body: "  @impl true\n  def description, do: \"half\"\n")
+
+      file = Path.join(tmp_dir, "half.exs")
+      File.write!(file, fixture.code)
+
+      assert_raise ArgumentError, ~r/half\.exs does not compile/, fn ->
+        ScriptTest.compile_script(file)
+      end
+
+      refute :code.is_loaded(module)
+    end
+
+    test "compiles the libraries a script declares first and checks it against them",
+         %{tmp_dir: tmp_dir} do
+      library = ScriptCase.library_fixture()
+      library_file = Path.join(tmp_dir, "library.exs")
+      File.write!(library_file, library.code)
+
+      declared = ~s|secrets: [], libraries: %{"#{library.name}" => "~> 1.0"}}|
+
+      script =
+        ScriptCase.fixture(
+          body:
+            ScriptCase.fixture().code
+            |> String.split("\n", parts: 2)
+            |> List.last()
+            |> String.replace_suffix("end\n", "")
+            |> String.replace("secrets: []}", declared)
+        )
+
+      script_file = Path.join(tmp_dir, "script.exs")
+      File.write!(script_file, script.code)
+
+      compiled = ScriptTest.compile_script(script_file, libraries: [library_file])
+      assert compiled.declarations.libraries == %{library.name => "~> 1.0"}
+
+      assert_raise ArgumentError, ~r/script\.exs is refused: .*library_missing/, fn ->
+        ScriptTest.compile_script(script_file)
+      end
+
+      out_of_range = String.replace(script.code, ~s|"~> 1.0"|, ~s|"~> 2.0"|)
+      File.write!(script_file, out_of_range)
+
+      assert_raise ArgumentError, ~r/script\.exs is refused: .*library_out_of_range/, fn ->
+        ScriptTest.compile_script(script_file, libraries: [library_file])
+      end
+
+      assert_raise ArgumentError,
+                   ~r/library\.exs is a library, test it with compile_library/,
+                   fn ->
+                     ScriptTest.compile_script(library_file)
+                   end
+    end
+
+    test "purges every tree it compiled once the test ends", %{tmp_dir: tmp_dir} do
+      library = ScriptCase.library_fixture()
+      file = Path.join(tmp_dir, "library.exs")
+      File.write!(file, library.code)
+
+      # Registered ahead of the helper's own, so it runs after the helper's purge.
+      on_exit(fn -> refute Code.ensure_loaded?(library.module) end)
+
+      ScriptTest.compile_library(file)
+      assert Code.ensure_loaded?(library.module)
+    end
+  end
+
+  describe "compile_library/1" do
+    @describetag :tmp_dir
+
+    test "compiles a library on its own, and refuses a script", %{tmp_dir: tmp_dir} do
+      library = ScriptCase.library_fixture()
+      file = Path.join(tmp_dir, "library.exs")
+      File.write!(file, library.code)
+
+      compiled = ScriptTest.compile_library(file)
+      assert compiled.module == library.module
+      assert compiled.version == "1.0.0"
+      assert compiled.module.echo(:same) == :same
+
+      script_file = Path.join(tmp_dir, "script.exs")
+      File.write!(script_file, ScriptCase.fixture().code)
+
+      assert_raise ArgumentError, ~r/script\.exs is a script, not a library/, fn ->
+        ScriptTest.compile_library(script_file)
+      end
+    end
   end
 
   describe "context/1" do

@@ -12,6 +12,15 @@ split is deliberate: things worth having on every device belong there, and thing
 that belong to this machine belong here. A node keeps working whether or not
 anything else is reachable.
 
+> ### v0.8.0: scripts gain libraries and versions {: .info}
+>
+> Breaking for script authors: the script contract is now 2 — every script defines `version/0`, a `Version` string, and a declarations key the node does not read is refused by name.
+> A row stored before this release compiles at boot against the new contract and is kept Broken until its code gains `version/0` and is stored again with `update` or `scripts import`.
+> The shipped examples are brought forward by a migration unless they were edited.
+>
+> New: `YmerNode.Library`, shared code under `Library.<Name>` that scripts declare in `libraries` with a requirement; `Context.execute/3` and `query/3`, and the MCP `notebook` tool's `params`, bind query parameters; `YmerNode.Script.Test.compile_script/2` takes `libraries:`, and `compile_library/1` tests a library alone.
+> ymer-node-scripts adopts by widening its `ymer_node` requirement and adding `version/0` to each script.
+
 ## Requirements are real
 
 - **Elixir and Erlang.** `mise.toml` pins the versions this repo is developed
@@ -200,8 +209,11 @@ functions a script is handed from the node's own docs — and `scripts info
 docs from the release at the version it carries — and to check the code
 with `script_author` before it creates anything. Published, the same text —
 less the list of applications the guide ends with, which the node computes —
-is the `YmerNode.Script` and `YmerNode.Script.Context` pages of the docs, which
-`mix docs` builds here. Keep `script_author` set to ask, as *Running it* says:
+is the `YmerNode.Script`, `YmerNode.Script.Context` and `YmerNode.Library`
+pages of the docs, which `mix docs` builds here. Code several scripts share
+goes in a library: a `Library.<Name>` module each of them declares under
+`libraries` in its `declarations/0`, as the `YmerNode.Library` page says.
+Keep `script_author` set to ask, as *Running it* says:
 what it creates, the node runs. What a script can reach beyond that contract
 — the standard library, a library, a service such as the browser service —
 and the test that decides when the node itself grows are mapped in

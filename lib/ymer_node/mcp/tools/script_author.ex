@@ -43,10 +43,12 @@ defmodule YmerNode.Mcp.Tools.ScriptAuthor do
   @impl true
   def description,
     do:
-      "Write the scripts this node runs: check compiles code and reports what " <>
-        "it would become, create and update store it, accept marks stored code " <>
-        "accepted, remove deletes it. A script is a small Elixir module named " <>
-        "Script.<Name>; storing one accepts it, and the node will run those " <>
+      "Write the scripts this node runs and the libraries they call: check " <>
+        "compiles code and reports what it would become, create and update store " <>
+        "it, accept marks stored code accepted, remove deletes it. A script is a " <>
+        "small Elixir module named Script.<Name>, a library one named " <>
+        "Library.<Name> that scripts declare and call; storing either accepts it, " <>
+        "and the node will run those " <>
         "bytes with its own permissions until they change. Needs approval: this " <>
         "is the tool that decides what code this machine will run — set it to " <>
         "ask, and read what it is storing."

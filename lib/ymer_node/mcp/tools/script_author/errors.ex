@@ -11,13 +11,16 @@ defmodule YmerNode.Mcp.Tools.ScriptAuthor.Errors do
   **Acceptance** refuses what the compiler cannot see, because it depends on the
   other rows.
 
-  Deliberately not shared with `YmerNode.Mcp.Tools.Scripts.Errors`: nothing here
-  can reach that tool, which compiles nothing and accepts nothing, and nothing
-  there but `:not_found` can reach this one.
+  Deliberately not shared with `YmerNode.Mcp.Tools.Scripts.Errors`, which
+  compiles nothing and accepts nothing. Beside the wrong-typed twins every tool
+  renders, the two meet at `:not_found` and the three library reasons, which a
+  run answers too, with a run's own fix.
   """
   alias YmerNode.Mcp.Tools.Helpers
 
   @author "Fix the code and call `check` before storing it again."
+
+  @libraries "`scripts list` shows the libraries this node holds and their versions."
 
   def format(reason, ctx \\ %{}), do: message(reason, ctx)
 
@@ -54,6 +57,14 @@ defmodule YmerNode.Mcp.Tools.ScriptAuthor.Errors do
       "#{detail}. A throttle is one process per name, shared by every script declaring it, " <>
         "so its parameters must agree: declare the same ones, or a name of this script's own."
 
+  def message({:library_missing, detail}, _ctx), do: "#{detail}. #{@libraries}"
+  def message({:library_broken, detail}, _ctx), do: "#{detail}. #{@libraries}"
+  def message({:library_out_of_range, detail}, _ctx), do: "#{detail}. #{@libraries}"
+
+  def message({:requirement_broken, detail}, _ctx), do: detail <> "."
+  def message({:library_in_use, detail}, _ctx), do: detail <> "."
+  def message({:version_unchanged, detail}, _ctx), do: detail <> "."
+
   def message({:run_in_flight, detail}, _ctx),
     do:
       "#{detail}. A run is bounded by its own deadline — 5 minutes at the very " <>
@@ -78,12 +89,15 @@ defmodule YmerNode.Mcp.Tools.ScriptAuthor.Errors do
         "move that work into run/3."
 
   def message({:no_module, _detail}, _ctx),
-    do: "The code defines no module. It must be one `defmodule Script.<Name>`."
+    do:
+      "The code defines no module. It must be one `defmodule Script.<Name>`, or " <>
+        "`defmodule Library.<Name>` for a library."
 
   def message({:module_outside_script, detail}, _ctx),
     do:
-      "#{detail}. Every module in a script lives under `Script.` — that is what " <>
-        "keeps a script from redefining something this node depends on."
+      "#{detail}. Every module in a script lives under `Script.`, and in a library " <>
+        "under `Library.` — that is what keeps a script from redefining something " <>
+        "this node depends on."
 
   def message({:several_top_modules, detail}, _ctx),
     do: "#{detail}. One script is one top-level module; nest the rest under it."
@@ -92,15 +106,22 @@ defmodule YmerNode.Mcp.Tools.ScriptAuthor.Errors do
     do: "#{detail}. The name has to be readable from the code without running it."
 
   def message({:missing_contract, detail}, _ctx),
-    do: "#{detail}. Add `use YmerNode.Script` as the module's first line."
+    do:
+      "#{detail}. Add `use YmerNode.Script` as the module's first line, or " <>
+        "`use YmerNode.Library` for a library."
+
+  def message({:contract_mismatch, detail}, _ctx), do: detail <> "."
+
+  def message({:undeclared_library, detail}, _ctx), do: "#{detail}. #{@author}"
 
   def message({:unknown_contract, detail}, _ctx),
     do: "#{detail}. This node speaks a different contract version than the code was written for."
 
   def message({:missing_callbacks, detail}, _ctx),
-    do: "The script does not implement: #{detail}. All four are required."
+    do: "The code does not implement #{detail}."
 
   def message({:invalid_description, detail}, _ctx), do: "#{detail} #{@author}"
+  def message({:invalid_version, detail}, _ctx), do: "#{detail}. #{@author}"
   def message({:invalid_actions, detail}, _ctx), do: "#{detail} #{@author}"
   def message({:invalid_declarations, detail}, _ctx), do: "#{detail} #{@author}"
 
@@ -110,7 +131,7 @@ defmodule YmerNode.Mcp.Tools.ScriptAuthor.Errors do
   def message({:metadata_timeout, detail}, _ctx),
     do:
       "The script did not finish reporting itself: #{detail}. " <>
-        "description/0, actions/0 and declarations/0 must answer immediately — " <>
+        "description/0, version/0, actions/0 and declarations/0 must answer immediately — " <>
         "put the work in run/3."
 
   # The wrong-typed twins the action layer raises before anything is compiled.

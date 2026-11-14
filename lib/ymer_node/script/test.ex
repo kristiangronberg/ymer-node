@@ -34,6 +34,18 @@ defmodule YmerNode.Script.Test do
         assert {:ok, _issue} = compiled.module.run(:get, %{"key" => "X-1"}, context)
       end
 
+  A script that declares libraries is compiled with their files, each library
+  first, and its declarations are checked against their versions as acceptance
+  checks them — no layout is imposed on the repository, so the paths are the
+  test's to name:
+
+      compiled =
+        YmerNode.Script.Test.compile_script("scripts/jira.exs",
+          libraries: ["libraries/crosskey.exs"]
+        )
+
+  A library is tested on its own with `compile_library/1`.
+
   ## `async: false`, and why
 
   Every test module using `start_run_tree/1` runs `async: false`. The run
@@ -69,6 +81,7 @@ defmodule YmerNode.Script.Test do
   alias YmerNode.Script.Context
   alias YmerNode.Script.Harness
   alias YmerNode.Scripts.Compiler
+  alias YmerNode.Scripts.Libraries
   alias YmerNode.Scripts.Runner
   alias YmerNode.Secrets
 
@@ -93,8 +106,49 @@ defmodule YmerNode.Script.Test do
   Answers the compiler's map — `module`, `name`, `declarations`, `actions` and
   the rest — and raises with the compiler's reason when the file does not
   compile.
+
+  `libraries:` takes the paths of the libraries the script declares. Each is
+  compiled first, through `compile_library/1`, and the script's declarations are
+  then checked against their versions as acceptance checks them
+  (`YmerNode.Scripts.Libraries.check_held/3`): a library the script declares and
+  the list leaves out, or one at a version outside its requirement, raises with
+  the refusal acceptance would give. A library's own path raises, pointing at
+  `compile_library/1`. Every tree is purged when the test ends.
   """
-  def compile_script(path) when is_binary(path) do
+  def compile_script(path, options \\ []) when is_binary(path) and is_list(options) do
+    libraries = options |> Keyword.get(:libraries, []) |> Enum.map(&compile_library/1)
+
+    compiled =
+      case compile_file(path) do
+        %{kind: :script} = compiled ->
+          compiled
+
+        %{kind: kind} ->
+          raise ArgumentError, "#{path} is a #{kind}, test it with compile_library/1"
+      end
+
+    held = Map.new(libraries, &{&1.name, Map.merge(&1, %{loaded?: true, error: nil})})
+
+    case Libraries.check_held(compiled.name, compiled.declarations.libraries, held) do
+      :ok -> compiled
+      {:error, reason} -> raise ArgumentError, "#{path} is refused: #{inspect(reason)}"
+    end
+  end
+
+  @doc """
+  Compiles the library file at `path` through the node's compiler and purges its
+  module tree when the test ends, answering the compiler's map — its `module`,
+  `name`, `version` and documented `api` among it. Raises when the file does not
+  compile, or is not a library.
+  """
+  def compile_library(path) when is_binary(path) do
+    case compile_file(path) do
+      %{kind: :library} = compiled -> compiled
+      %{kind: kind} -> raise ArgumentError, "#{path} is a #{kind}, not a library"
+    end
+  end
+
+  defp compile_file(path) do
     case path |> File.read!() |> Compiler.compile() do
       {:ok, compiled} ->
         module = compiled.module

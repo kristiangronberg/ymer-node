@@ -95,8 +95,10 @@ defmodule YmerNode.Scripts.Runner do
 
   | reason | what it means |
   | --- | --- |
+  | `:not_runnable` | the row is a library, which has no actions and is never run |
   | `:not_accepted` | the row's accepted hash is not its code hash |
   | `:not_loaded` | this node has no compiled module for the script |
+  | `:library_missing`, `:library_broken`, `:library_out_of_range` | the script is loaded, but a library it declares is no longer held in range; the detail names the library and the fix |
   | `:unknown_action` | the script serves no action by that name |
   | `:invalid_schema` | the action's own `:properties` are not a schema `jsv` can build |
   | `:invalid_args` | the arguments do not satisfy that schema |
@@ -118,6 +120,7 @@ defmodule YmerNode.Scripts.Runner do
   """
   alias YmerNode.Script.Context
   alias YmerNode.Scripts.CLI
+  alias YmerNode.Scripts.Libraries
   alias YmerNode.Scripts.Loader
   alias YmerNode.Scripts.Script
 
@@ -150,7 +153,8 @@ defmodule YmerNode.Scripts.Runner do
   would let a caller fill the atom table one unknown action at a time.
   """
   def run(%Script{} = script, action, args) when is_binary(action) and is_map(args) do
-    with :ok <- check_accepted(script) do
+    with :ok <- check_runnable(script),
+         :ok <- check_accepted(script) do
       registered(script, fn -> resolve_and_run(script, action, args) end)
     end
   end
@@ -194,7 +198,8 @@ defmodule YmerNode.Scripts.Runner do
   refusal is one `run/3` gives.
   """
   def check(%Script{} = script, action, args) when is_binary(action) and is_map(args) do
-    with :ok <- check_accepted(script),
+    with :ok <- check_runnable(script),
+         :ok <- check_accepted(script),
          {:ok, facts} <- loaded(script),
          {:ok, name, schema} <- resolve_action(script, facts.actions, action),
          :ok <- check_args(script, name, schema, args) do
@@ -242,6 +247,17 @@ defmodule YmerNode.Scripts.Runner do
     end
   end
 
+  # A library is called by the scripts that declare it, never run on its own, so
+  # a run and a schedule of one are refused before anything else is read.
+  defp check_runnable(%Script{kind: "library", name: name}) do
+    {:error,
+     {:not_runnable,
+      "#{name} is a library: it has no actions and never runs — the scripts that " <>
+        "declare it call it, and `describe` shows its functions"}}
+  end
+
+  defp check_runnable(%Script{}), do: :ok
+
   defp check_accepted(%Script{} = script) do
     if Script.accepted?(script) do
       :ok
@@ -258,11 +274,24 @@ defmodule YmerNode.Scripts.Runner do
 
   defp loaded(%Script{name: name}) do
     case Loader.facts(name) do
-      %{loaded?: true} = facts -> {:ok, facts}
+      %{loaded?: true} = facts -> held(name, facts)
       %{error: {reason, detail}} -> {:error, {:not_loaded, "#{name}: #{reason} — #{detail}"}}
       nil -> {:error, {:not_loaded, "#{name} has not been compiled since this node started"}}
     end
   end
+
+  # A script runs only while every library it declares is still held: a library
+  # whose restore failed after a refused write is Broken while its dependents'
+  # own facts stay loaded, and a run would otherwise die inside the script at
+  # its call. The library's own refusal is the answer, never `:not_loaded`:
+  # the script itself compiled, and storing it again would only make it Broken.
+  defp held(name, %{declarations: %{libraries: libraries}} = facts)
+       when map_size(libraries) > 0 do
+    with :ok <- Libraries.check_held(name, libraries, Loader.all_facts(), :run),
+         do: {:ok, facts}
+  end
+
+  defp held(_name, facts), do: {:ok, facts}
 
   defp prepare(script, module, action, args) do
     with {:ok, metadata} <- read_metadata(script, module),
@@ -459,9 +488,10 @@ defmodule YmerNode.Scripts.Runner do
     "#{script.name} #{label}: #{Exception.message(exception)}#{script_frame(stacktrace)}"
   end
 
-  # The compiler names a script's file `script:<name>`, so the frame that
-  # belongs to the script says so and every frame from the node's own code does
-  # not. Showing the first one turns "boom" into "boom (script:hex:12: …)".
+  # The compiler names a script's file `script:<name>` and a library's
+  # `library:<name>`, so the frame that belongs to either says so and every frame
+  # from the node's own code does not. Showing the first one turns "boom" into
+  # "boom (script:hex:12: …)", or into the library's line where a library raised.
   defp script_frame(stacktrace) do
     case Enum.find(stacktrace, &script_frame?/1) do
       nil -> ""
@@ -470,7 +500,10 @@ defmodule YmerNode.Scripts.Runner do
   end
 
   defp script_frame?({_module, _function, _arity, location}) when is_list(location) do
-    location |> Keyword.get(:file, ~c"") |> List.to_string() |> String.starts_with?("script:")
+    location
+    |> Keyword.get(:file, ~c"")
+    |> List.to_string()
+    |> String.starts_with?(["script:", "library:"])
   end
 
   defp script_frame?(_entry), do: false

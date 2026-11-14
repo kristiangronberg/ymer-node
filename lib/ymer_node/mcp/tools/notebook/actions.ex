@@ -26,21 +26,17 @@ defmodule YmerNode.Mcp.Tools.Notebook.Actions do
   alias YmerNode.Notebook
   alias YmerNode.Notebook.Backup
 
-  def run(:execute, %{"sql" => sql}) when is_binary(sql) do
-    ctx = %{action_verb: "execute SQL"}
-
-    case Notebook.execute(sql) do
-      {:ok, result} -> {:ok, Format.execute_result(result), %{action: :execute}}
-      {:error, reason} -> {:error, {reason, ctx}}
+  def run(:execute, %{"sql" => sql} = data) when is_binary(sql) do
+    case Map.get(data, "params", []) do
+      params when is_list(params) -> execute(sql, params)
+      params -> Helpers.wrong_type("params", "an array", params, "execute SQL")
     end
   end
 
-  def run(:query, %{"sql" => sql}) when is_binary(sql) do
-    ctx = %{action_verb: "run query"}
-
-    case Notebook.query(sql) do
-      {:ok, result} -> {:ok, Format.query_result(result), %{}}
-      {:error, reason} -> {:error, {reason, ctx}}
+  def run(:query, %{"sql" => sql} = data) when is_binary(sql) do
+    case Map.get(data, "params", []) do
+      params when is_list(params) -> query(sql, params)
+      params -> Helpers.wrong_type("params", "an array", params, "run query")
     end
   end
 
@@ -113,4 +109,20 @@ defmodule YmerNode.Mcp.Tools.Notebook.Actions do
 
   def run(:restore, %{"id" => id}),
     do: Helpers.wrong_type("id", "a string", id, "restore the notebook")
+
+  # `params` is the one value here that is not a string, and its elements go no
+  # further than `YmerNode.Notebook`, which binds each or refuses it by position.
+  defp execute(sql, params) do
+    case Notebook.execute(sql, params) do
+      {:ok, result} -> {:ok, Format.execute_result(result), %{action: :execute}}
+      {:error, reason} -> {:error, {reason, %{action_verb: "execute SQL"}}}
+    end
+  end
+
+  defp query(sql, params) do
+    case Notebook.query(sql, params) do
+      {:ok, result} -> {:ok, Format.query_result(result), %{}}
+      {:error, reason} -> {:error, {reason, %{action_verb: "run query"}}}
+    end
+  end
 end

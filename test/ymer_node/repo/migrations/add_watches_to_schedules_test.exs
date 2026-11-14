@@ -177,6 +177,7 @@ defmodule YmerNode.Repo.Migrations.AddWatchesToSchedulesTest do
           accepted_at: now(),
           origin: "authored",
           contract: YmerNode.Script.contract(),
+          version: "1.0.0",
           description: name,
           declarations: %{"hosts" => [], "url_action" => nil, "secrets" => []}
         })

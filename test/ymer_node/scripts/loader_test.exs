@@ -48,6 +48,9 @@ defmodule YmerNode.Scripts.LoaderTest do
           def description, do: "#{name}"
 
           @impl true
+          def version, do: "1.0.0"
+
+          @impl true
           def actions, do: %{noop: %{description: "n", properties: %{}, write: false}}
 
           @impl true
@@ -75,6 +78,7 @@ defmodule YmerNode.Scripts.LoaderTest do
         accepted_at: DateTime.utc_now() |> DateTime.truncate(:second),
         origin: "authored",
         contract: 1,
+        version: "1.0.0",
         description: fixture.name,
         declarations: %{"hosts" => [], "url_action" => nil, "secrets" => []}
       }
@@ -102,7 +106,7 @@ defmodule YmerNode.Scripts.LoaderTest do
       assert {:ok, _compiled} = Loader.load(fixture.code)
 
       facts = Loader.facts(fixture.name)
-      assert facts.contract == 1
+      assert facts.contract == 2
       assert facts.description == fixture.name
       assert %{noop: %{description: "n", properties: %{}, write: false}} = facts.actions
 
@@ -112,7 +116,8 @@ defmodule YmerNode.Scripts.LoaderTest do
                secrets: [],
                throttles: %{},
                cache: :text,
-               web_fallback: false
+               web_fallback: false,
+               libraries: %{}
              }
     end
 
@@ -308,6 +313,155 @@ defmodule YmerNode.Scripts.LoaderTest do
       assert {:ok, _} = Loader.load(fixture.code)
 
       assert %{loaded?: true} = Map.fetch!(Loader.all_facts(), fixture.name)
+    end
+  end
+
+  describe "libraries" do
+    # The segment sorts after every script fixture's `Loaded…`, so a boot that
+    # compiled by name alone would meet the script first.
+    defp library_fixture(version \\ "1.0.0") do
+      segment = "Zlib#{System.unique_integer([:positive])}"
+      module = Module.concat(["Library", segment])
+
+      code = """
+      defmodule Library.#{segment} do
+        use YmerNode.Library
+
+        @impl true
+        def description, do: "shared"
+
+        @impl true
+        def version, do: "#{version}"
+
+        def echo(value), do: value
+      end
+      """
+
+      on_exit(fn -> Compiler.purge(module) end)
+      %{code: code, name: Macro.underscore(segment), module: module, segment: segment}
+    end
+
+    defp dependent_code(fixture, library, requirement) do
+      String.replace(
+        fixture.code,
+        "secrets: []}",
+        ~s|secrets: [], libraries: %{"#{library.name}" => "#{requirement}"}}|
+      )
+    end
+
+    test "boot compiles libraries before scripts, whatever their names" do
+      library = library_fixture()
+      script = fixture()
+      code = dependent_code(script, library, "~> 1.0")
+
+      insert!(library, %{kind: "library", declarations: %{}})
+
+      insert!(script, %{
+        code: code,
+        declarations: %{"libraries" => %{library.name => "~> 1.0"}}
+      })
+
+      Loader.boot_compile()
+
+      assert %{loaded?: true, kind: :library, version: "1.0.0"} = Loader.facts(library.name)
+      assert %{loaded?: true, kind: :script} = Loader.facts(script.name)
+    end
+
+    test "boot keeps a script Broken while a library it declares failed its own compile" do
+      library = library_fixture()
+      script = fixture()
+      broken = String.replace(library.code, ~s|  @impl true\n  def version, do: "1.0.0"\n|, "")
+
+      insert!(library, %{code: broken, kind: "library", declarations: %{}})
+      insert!(script, %{code: dependent_code(script, library, "~> 1.0")})
+
+      Loader.boot_compile()
+
+      assert %{loaded?: false, error: {:missing_callbacks, _detail}} = Loader.facts(library.name)
+      assert %{loaded?: false, error: {:library_broken, detail}} = Loader.facts(script.name)
+      assert detail =~ "the row #{library.name} could not compile here (missing_callbacks:"
+      refute function_exported?(script.module, :run, 3)
+    end
+
+    test "boot keeps a script Broken while a library it declares is out of range" do
+      library = library_fixture("2.0.0")
+      script = fixture()
+
+      insert!(library, %{kind: "library", declarations: %{}})
+      insert!(script, %{code: dependent_code(script, library, "~> 1.0")})
+
+      Loader.boot_compile()
+
+      assert %{loaded?: false, error: {:library_out_of_range, detail}} = Loader.facts(script.name)
+      assert detail =~ "this node holds #{library.name} 2.0.0"
+      refute function_exported?(script.module, :run, 3)
+    end
+
+    test "a write refuses a script whose library is not held, and keeps nothing of it" do
+      library = library_fixture()
+      script = fixture()
+
+      assert {:error, {:library_missing, detail}} =
+               Loader.load(dependent_code(script, library, "~> 1.0"))
+
+      assert detail =~ "which this node does not hold"
+      assert Loader.facts(script.name) == nil
+
+      assert {:ok, _library} = Loader.load(library.code)
+      assert {:ok, _script} = Loader.load(dependent_code(script, library, "~> 1.0"))
+    end
+
+    @tag doc: """
+         Purging a library kills a dependent's run that is inside its code, and
+         the library's own name never runs, so the guard has to look at the
+         dependents. A failure means a library write can land over a running
+         script that calls it.
+         """
+    test "a guarded write of a library is refused while a script declaring it runs" do
+      library = library_fixture()
+      script = fixture()
+
+      insert!(script, %{declarations: %{"libraries" => %{library.name => "~> 1.0"}}})
+      assert {:ok, _library} = Loader.load(library.code)
+
+      {:ok, _owner} = Registry.register(YmerNode.Scripts.Runs, script.name, :run)
+
+      assert {:error, {:run_in_flight, detail}} = Loader.load(library.code, idle_guard: true)
+
+      assert detail =~
+               "#{library.name} is declared by #{script.name}, and #{script.name} has a run"
+
+      assert {:error, {:run_in_flight, _detail}} = Loader.check(library.code)
+
+      Registry.unregister(YmerNode.Scripts.Runs, script.name)
+      assert {:ok, _library} = Loader.load(library.code, idle_guard: true)
+    end
+
+    test "a guarded write of a library is refused while a run under its own name is in flight" do
+      library = library_fixture()
+      assert {:ok, _library} = Loader.load(library.code)
+
+      {:ok, _owner} = Registry.register(YmerNode.Scripts.Runs, library.name, :run)
+
+      assert {:error, {:run_in_flight, _detail}} = Loader.load(library.code, idle_guard: true)
+      assert {:error, {:run_in_flight, _detail}} = Loader.check(library.code)
+
+      Registry.unregister(YmerNode.Scripts.Runs, library.name)
+    end
+
+    test "an unload of a library is refused while a script declares it, its tree kept" do
+      library = library_fixture()
+      script = fixture()
+
+      insert!(script, %{declarations: %{"libraries" => %{library.name => "~> 1.0"}}})
+      assert {:ok, _library} = Loader.load(library.code)
+
+      assert {:error, {:library_in_use, detail}} =
+               Loader.unload(library.name, library.module, kind: :library)
+
+      assert detail =~ "#{library.name} is declared by #{script.name} (~> 1.0)"
+      assert %{loaded?: true} = Loader.facts(library.name)
+      assert function_exported?(library.module, :echo, 1)
     end
   end
 end

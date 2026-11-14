@@ -15,7 +15,7 @@ defmodule YmerNode.Schedules.LastRun do
   | outcome | reasons | whose move |
   | --- | --- | --- |
   | `ok` | — | nobody's |
-  | `refused` | `:not_found`, `:not_accepted`, `:not_loaded`, `:unknown_action`, `:invalid_schema`, `:invalid_args`, `:no_recipe`, `:reference_changed` | the run never started, or its answer was not kept: fix the schedule, or accept the script |
+  | `refused` | `:not_found`, `:not_accepted`, `:not_runnable`, `:not_loaded`, `:library_missing`, `:library_broken`, `:library_out_of_range`, `:unknown_action`, `:invalid_schema`, `:invalid_args`, `:no_recipe`, `:reference_changed` | the run never started, or its answer was not kept: fix the schedule, or accept the script; for a `:library_*` reason, fix or create the library the script declares |
   | `error` | `:script_error`, `:script_raised`, `:script_exited`, `:bad_return`, `:result_not_encodable`, `:not_cache_contract`, `:not_text` | the script ran and failed: fix the script |
   | `timeout` | `:timeout` | the run passed its deadline and was killed |
 
@@ -34,7 +34,11 @@ defmodule YmerNode.Schedules.LastRun do
   @refused [
     :not_found,
     :not_accepted,
+    :not_runnable,
     :not_loaded,
+    :library_missing,
+    :library_broken,
+    :library_out_of_range,
     :unknown_action,
     :invalid_schema,
     :invalid_args,
